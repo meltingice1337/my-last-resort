@@ -26,7 +26,7 @@ function AppRoutes() {
 
 export default function MyLastResort() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/my-last-resort">
       <AppRoutes />
     </BrowserRouter>
   );
