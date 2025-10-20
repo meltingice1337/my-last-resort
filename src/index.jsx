@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useNavigate, HashRouter } from 'react-rou
 import HomePage from './components/HomePage';
 import CreatePage from './components/CreatePage';
 import RestorePage from './components/RestorePage';
+import "./index.css";
 
 function AppRoutes() {
   const navigate = useNavigate();

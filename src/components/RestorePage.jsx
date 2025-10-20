@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Unlock, Users, CheckCircle, Camera, AlertCircle, Copy, Check } from 'lucide-react';
 import Header from './Header';
 import QRScanner from './QRScanner';
@@ -14,6 +14,14 @@ export default function RestorePage({ onBack }) {
     const [scanningIndex, setScanningIndex] = useState(null);
     const [copied, setCopied] = useState(false);
     const threshold = 3; // This could be dynamic based on share metadata
+    const resultRef = useRef(null);
+
+    // Scroll to result when secret is restored
+    useEffect(() => {
+        if ((restoredSecret || error) && resultRef.current) {
+            resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, [restoredSecret, error]);
 
     const restoreSecret = async () => {
         try {
@@ -163,7 +171,7 @@ export default function RestorePage({ onBack }) {
                     </button>
 
                     {error && (
-                        <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-4 sm:p-6 mb-6">
+                        <div ref={resultRef} className="bg-red-900/30 border border-red-700/50 rounded-lg p-4 sm:p-6 mb-6">
                             <div className="flex items-start gap-3">
                                 <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-400 flex-shrink-0 mt-0.5" />
                                 <div>
@@ -177,7 +185,7 @@ export default function RestorePage({ onBack }) {
                     )}
 
                     {restoredSecret && (
-                        <div className="bg-green-900/30 border border-green-700/50 rounded-lg p-4 sm:p-6">
+                        <div ref={resultRef} className="bg-green-900/30 border border-green-700/50 rounded-lg p-4 sm:p-6">
                             <div className="flex items-center gap-2 mb-3">
                                 <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                                 <span className="font-bold text-sm sm:text-base text-green-300">My Secret is Restored ✓</span>
