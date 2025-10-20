@@ -13,6 +13,7 @@ export default defineConfig({
         }
     )
     ],
+    base: '/my-last-resort',
     define: {
         global: 'globalThis',
     },
