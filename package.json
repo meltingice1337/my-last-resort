@@ -29,9 +29,12 @@
     "secrets.js-grempe": "^2.0.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-basic-ssl": "^2.1.0",
     "@vitejs/plugin-react": "^5.0.4",
     "gh-pages": "^6.3.0",
+    "prettier-eslint": "^16.4.2",
+    "tailwindcss": "^4.1.14",
     "terser": "^5.44.0",
     "vite": "^7.1.10",
     "vite-plugin-node-polyfills": "^0.24.0"
