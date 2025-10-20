@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, HashRouter } from 'react-router-dom';
 import HomePage from './components/HomePage';
 import CreatePage from './components/CreatePage';
 import RestorePage from './components/RestorePage';
@@ -26,8 +26,8 @@ function AppRoutes() {
 
 export default function MyLastResort() {
   return (
-    <BrowserRouter basename="/my-last-resort">
+    <HashRouter>
       <AppRoutes />
-    </BrowserRouter>
+    </HashRouter>
   );
 }
