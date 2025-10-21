@@ -17,7 +17,7 @@ const generateQRDataUrl = async (data) => {
 
 export const generateSharePDF = async (share, threshold, numShares) => {
     // Split large share data into chunks for QR codes
-    const chunks = splitDataIntoQRChunks(share.data, 1000);
+    const chunks = splitDataIntoQRChunks(share.data, 500);
 
     // Generate all QR codes BEFORE rendering PDF
     const qrImages = [];

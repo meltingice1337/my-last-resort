@@ -118,7 +118,7 @@ export default function RestorePage({ onBack }) {
 
                     <div className="mb-6">
                         <p className="text-sm sm:text-base text-gray-300 mb-4">
-                            Contact the people who have my recovery pieces. Gather enough pieces and enter them here to restore what I need.
+                            Contact the people who have my recovery pieces. Gather enough pieces and enter them here to restore the secret. The specific order doesn't matter.
                         </p>
 
                         <div className="space-y-3 sm:space-y-4">

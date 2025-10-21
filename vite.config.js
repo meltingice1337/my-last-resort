@@ -42,5 +42,14 @@ export default defineConfig({
         drop_console: false, // Set to true to remove console logs in production
       },
     },
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Suppress eval warning from vm-browserify (third-party dependency)
+        if (warning.code === 'EVAL' && warning.loc?.file?.includes('vm-browserify')) {
+          return;
+        }
+        warn(warning);
+      },
+    },
   },
 });
