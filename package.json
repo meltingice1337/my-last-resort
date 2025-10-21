@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy-pages": "vite build && gh-pages -d dist",
+    "deploy-pages": "vite build && gh-pages -d dist && rm -rf dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -33,6 +33,7 @@
     "@vitejs/plugin-basic-ssl": "^2.1.0",
     "@vitejs/plugin-react": "^5.0.4",
     "gh-pages": "^6.3.0",
+    "prettier": "^3.6.2",
     "prettier-eslint": "^16.4.2",
     "tailwindcss": "^4.1.14",
     "terser": "^5.44.0",
