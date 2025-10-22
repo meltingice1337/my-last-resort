@@ -101,9 +101,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   qrImage: {
-    width: 140,
-    height: 140,
-    border: '2px solid #000',
+    width: 220,
+    height: 220,
   },
   qrInstructions: {
     flex: 1,
