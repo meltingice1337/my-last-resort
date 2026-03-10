@@ -1,31 +1,26 @@
 {
-  "name": "nuclear-event",
-  "version": "1.0.0",
-  "description": "",
+  "name": "emergency-vault",
+  "version": "2.0.0",
+  "description": "Emergency Vault — recover encrypted secrets using Shamir's Secret Sharing",
   "main": "index.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "deploy-pages": "vite build && gh-pages -d dist && rm -rf dist",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "cli:build": "pnpm --filter emergency-vault-cli build",
+    "vault": "pnpm cli:build && node cli/dist/index.js",
+    "vault:cleanup": "find vault-workspace -type f -exec shred -vfzu {} + 2>/dev/null; rm -rf vault-workspace && echo 'vault-workspace/ shredded and destroyed.'"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.18.0",
   "dependencies": {
-    "@react-pdf/renderer": "^4.3.1",
-    "buffer": "^6.0.3",
-    "html5-qrcode": "^2.3.8",
-    "jspdf": "^3.0.3",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.546.0",
-    "pako": "^2.1.0",
-    "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router-dom": "^7.9.4",
     "secrets.js-grempe": "^2.0.0"
   },
   "devDependencies": {
@@ -37,7 +32,6 @@
     "prettier-eslint": "^16.4.2",
     "tailwindcss": "^4.1.14",
     "terser": "^5.44.0",
-    "vite": "^7.1.10",
-    "vite-plugin-node-polyfills": "^0.24.0"
+    "vite": "^7.1.10"
   }
 }
