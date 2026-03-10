@@ -6,7 +6,7 @@ export async function fetchVault() {
   const base = import.meta.env.BASE_URL || "/";
   const url = `${base}vault.json`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     throw new Error(
       `Failed to fetch vault.json (${res.status}). Is the vault deployed?`,
