@@ -4,7 +4,9 @@
  */
 export function parseShare(raw) {
   try {
-    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    // Strip all whitespace/newlines (PDF copy-paste introduces line breaks)
+    const cleaned = typeof raw === "string" ? raw.replace(/\s/g, "") : raw;
+    const data = typeof cleaned === "string" ? JSON.parse(cleaned) : cleaned;
 
     if (
       data.v !== 1 ||
