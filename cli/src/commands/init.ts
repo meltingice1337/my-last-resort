@@ -1,4 +1,3 @@
-import { mkdir } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import chalk from "chalk";
@@ -39,11 +38,15 @@ export async function initCommand(): Promise<void> {
 
     const config: VaultConfig = { threshold, totalShares, repoUrl };
 
-    await mkdir(PATHS.workspace, { recursive: true });
     await writeConfig(config);
 
-    console.log(chalk.green("\nvault.config.json created in vault-workspace/"));
-    console.log(chalk.dim(`Next: put your secret in ${PATHS.plaintext} then run: vault encrypt`));
+    console.log(chalk.green("\nvault.config.json created."));
+    console.log(chalk.dim("\nNext steps:"));
+    console.log(chalk.dim(`  1. Create ${PATHS.plaintext} with your secret content`));
+    console.log(chalk.dim("  2. Run 'vault encrypt' to encrypt and generate vault.json"));
+    console.log(chalk.dim("  3. Run 'vault split' to generate Shamir share PDFs"));
+    console.log(chalk.dim("  4. Print and distribute share PDFs to holders"));
+    console.log(chalk.dim("  5. Run 'vault cleanup' to shred sensitive files"));
   } finally {
     rl.close();
   }

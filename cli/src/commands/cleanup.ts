@@ -4,36 +4,9 @@ import { execSync } from "node:child_process";
 import chalk from "chalk";
 import { PATHS } from "../lib/paths.js";
 
+const SENSITIVE_FILES = [PATHS.key, PATHS.plaintext];
+
 export async function cleanupCommand(): Promise<void> {
-  if (!existsSync(PATHS.workspace)) {
-    console.log(chalk.green("Nothing to clean up. vault-workspace/ does not exist."));
-    return;
-  }
-
-  // Collect all files
-  const files: string[] = [];
-  async function walk(dir: string) {
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const full = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) {
-        await walk(full);
-      } else {
-        files.push(full);
-      }
-    }
-  }
-  await walk(PATHS.workspace);
-
-  if (!files.length) {
-    await rm(PATHS.workspace, { recursive: true });
-    console.log(chalk.green("vault-workspace/ was empty, removed."));
-    return;
-  }
-
-  console.log(chalk.bold(`Destroying ${files.length} files in vault-workspace/...`));
-
-  // Try shred first, fall back to simple overwrite + delete
   const hasShred = (() => {
     try {
       execSync("which shred", { stdio: "ignore" });
@@ -43,12 +16,33 @@ export async function cleanupCommand(): Promise<void> {
     }
   })();
 
+  const files: string[] = [];
+
+  // Collect sensitive files that exist
+  for (const f of SENSITIVE_FILES) {
+    if (existsSync(f)) files.push(f);
+  }
+
+  // Collect share PDFs
+  if (existsSync(PATHS.shares)) {
+    const entries = await readdir(PATHS.shares);
+    for (const entry of entries) {
+      files.push(`${PATHS.shares}/${entry}`);
+    }
+  }
+
+  if (!files.length) {
+    console.log(chalk.green("Nothing to clean up. No sensitive files found."));
+    return;
+  }
+
+  console.log(chalk.bold(`Destroying ${files.length} sensitive file(s)...\n`));
+
   for (const file of files) {
     try {
       if (hasShred) {
         execSync(`shred -fzu "${file}"`, { stdio: "ignore" });
       } else {
-        // Fallback: overwrite with zeros then delete
         const { writeFileSync, readFileSync, unlinkSync } = await import("node:fs");
         const size = readFileSync(file).length;
         writeFileSync(file, Buffer.alloc(size, 0));
@@ -60,8 +54,12 @@ export async function cleanupCommand(): Promise<void> {
     }
   }
 
-  await rm(PATHS.workspace, { recursive: true, force: true });
+  // Remove empty shares directory
+  if (existsSync(PATHS.shares)) {
+    await rm(PATHS.shares, { recursive: true, force: true });
+  }
 
-  console.log(chalk.green("\nvault-workspace/ shredded and destroyed."));
+  console.log(chalk.green("\nSensitive files shredded."));
+  console.log(chalk.dim("Remaining files (safe to keep): vault.json, vault.config.json"));
   console.log(chalk.dim("Also clear your shell history: history -c"));
 }

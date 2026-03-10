@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import chalk from "chalk";
 import { encrypt } from "../lib/crypto.js";
@@ -31,9 +31,11 @@ export async function updateCommand(options: { input?: string }): Promise<void> 
   const revision = getCurrentRevision() + 1;
   const vault = encrypt(plaintext, key, revision);
 
-  await mkdir("public", { recursive: true });
   await writeFile(PATHS.vaultOutput, JSON.stringify(vault, null, 2) + "\n");
 
-  console.log(chalk.green(`vault.json updated (same key — no share redistribution needed)`));
+  console.log(chalk.green(`\nvault.json updated (same key — no share redistribution needed)`));
   console.log(chalk.dim(`Revision: ${revision} | Updated: ${vault.updated}`));
+  console.log(chalk.dim("\nNext steps:"));
+  console.log(chalk.dim("  1. Deploy vault.json to your recovery website"));
+  console.log(chalk.dim("  2. Run 'vault cleanup' to shred plaintext.txt and .vault-key"));
 }

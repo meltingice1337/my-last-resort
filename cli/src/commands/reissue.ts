@@ -39,8 +39,6 @@ export async function reissueCommand(options: { input?: string }): Promise<void>
     return;
   }
 
-  await mkdir(PATHS.workspace, { recursive: true });
-
   // Generate new key
   const key = generateKey();
   await writeFile(PATHS.key, key.toString("hex") + "\n", { mode: 0o600 });
@@ -48,7 +46,6 @@ export async function reissueCommand(options: { input?: string }): Promise<void>
 
   // Re-encrypt — revision resets to 1 on reissue
   const vault = encrypt(plaintext, key, 1);
-  await mkdir("public", { recursive: true });
   await writeFile(PATHS.vaultOutput, JSON.stringify(vault, null, 2) + "\n");
   console.log(chalk.green(`Encrypted vault written to ${PATHS.vaultOutput}`));
   console.log(chalk.dim(`Revision: 1 | Updated: ${vault.updated}`));
@@ -67,4 +64,9 @@ export async function reissueCommand(options: { input?: string }): Promise<void>
 
   console.log(chalk.bold.green(`\nReissue complete. ${shares.length} new share PDFs generated.`));
   console.log(chalk.bold.red("Old shares are now INVALID. Collect and destroy them."));
+  console.log(chalk.dim("\nNext steps:"));
+  console.log(chalk.dim("  1. Print each new share PDF"));
+  console.log(chalk.dim("  2. Distribute to holders and collect/destroy old shares"));
+  console.log(chalk.dim("  3. Deploy vault.json to your recovery website"));
+  console.log(chalk.dim("  4. Run 'vault cleanup' to shred all sensitive files"));
 }

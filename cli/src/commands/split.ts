@@ -28,6 +28,9 @@ export async function splitCommand(): Promise<void> {
   }
 
   console.log(chalk.bold.green(`\n${shares.length} share PDFs generated in ${PATHS.shares}/`));
-  console.log(chalk.yellow("Print and distribute each PDF to its holder."));
-  console.log(chalk.yellow("Then run: vault cleanup"));
+  console.log(chalk.dim("\nNext steps:"));
+  console.log(chalk.dim("  1. Print each share PDF"));
+  console.log(chalk.dim("  2. Distribute one PDF to each trusted holder"));
+  console.log(chalk.dim("  3. Deploy vault.json to your recovery website"));
+  console.log(chalk.dim("  4. Run 'vault cleanup' to shred all sensitive files"));
 }
