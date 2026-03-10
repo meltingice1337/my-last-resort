@@ -1,0 +1,36 @@
+import { readFile, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import chalk from "chalk";
+import { readConfig } from "../lib/config.js";
+import { splitKey } from "../lib/shamir.js";
+import { generateSharePDF } from "../lib/pdf.js";
+import { PATHS } from "../lib/paths.js";
+
+export async function splitCommand(): Promise<void> {
+  if (!existsSync(PATHS.key)) {
+    console.log(chalk.red(".vault-key not found. Run 'vault encrypt' first."));
+    return;
+  }
+
+  const config = await readConfig();
+  const keyHex = (await readFile(PATHS.key, "utf8")).trim();
+
+  console.log(chalk.dim(`Splitting key into ${config.totalShares} shares (threshold: ${config.threshold})...`));
+
+  const shares = splitKey(keyHex, config.totalShares, config.threshold);
+
+  await mkdir(PATHS.shares, { recursive: true });
+
+  for (const share of shares) {
+    const holder = config.holders[share.i - 1];
+    const safeName = holder.name.replace(/[^a-zA-Z0-9]/g, "-");
+    const filename = `${PATHS.shares}/share-${share.i}-${safeName}.pdf`;
+
+    await generateSharePDF(share, holder, config, filename);
+    console.log(chalk.green(`  Created: ${filename}`));
+  }
+
+  console.log(chalk.bold.green(`\n${shares.length} share PDFs generated in ${PATHS.shares}/`));
+  console.log(chalk.yellow("Print and distribute each PDF to its holder."));
+  console.log(chalk.yellow("Then run: vault cleanup"));
+}

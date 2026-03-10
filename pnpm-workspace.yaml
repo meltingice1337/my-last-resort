@@ -1,3 +1,7 @@
+packages:
+  - "cli"
+
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - core-js
+  - esbuild

@@ -1,33 +1,16 @@
+import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { nodePolyfills } from "vite-plugin-node-polyfills";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    react(),
-    basicSsl(),
-    nodePolyfills({
-      globals: {
-        Buffer: true,
-      },
-      protocolImports: true,
-    }),
-  ],
+  plugins: [tailwindcss(), react(), basicSsl()],
   base: "/my-last-resort/",
-  define: {
-    global: "globalThis",
-  },
   resolve: {
     alias: {
-      // Ensure buffer imports resolve correctly
-      buffer: "buffer",
+      crypto: path.resolve(import.meta.dirname, "src/util/crypto-shim.js"),
     },
-  },
-  optimizeDeps: {
-    include: ["brotli"],
   },
   server: {
     host: true,
@@ -36,19 +19,10 @@ export default defineConfig({
     open: true,
   },
   build: {
-    minify: "terser", // or 'esbuild' for faster builds
+    minify: "terser",
     terserOptions: {
       compress: {
-        drop_console: false, // Set to true to remove console logs in production
-      },
-    },
-    rollupOptions: {
-      onwarn(warning, warn) {
-        // Suppress eval warning from vm-browserify (third-party dependency)
-        if (warning.code === 'EVAL' && warning.loc?.file?.includes('vm-browserify')) {
-          return;
-        }
-        warn(warning);
+        drop_console: false,
       },
     },
   },
