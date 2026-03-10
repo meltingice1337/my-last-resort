@@ -4,6 +4,7 @@ import { encryptCommand } from "./commands/encrypt.js";
 import { splitCommand } from "./commands/split.js";
 import { updateCommand } from "./commands/update.js";
 import { reissueCommand } from "./commands/reissue.js";
+import { decryptCommand } from "./commands/decrypt.js";
 import { cleanupCommand } from "./commands/cleanup.js";
 
 const program = new Command();
@@ -28,6 +29,12 @@ program
   .command("split")
   .description("Split the encryption key into Shamir shares and generate PDF cards")
   .action(splitCommand);
+
+program
+  .command("decrypt")
+  .description("Decrypt vault.json back to plaintext for editing")
+  .option("-o, --output <file>", "Output plaintext file")
+  .action(decryptCommand);
 
 program
   .command("update")
