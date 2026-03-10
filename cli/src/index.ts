@@ -4,6 +4,7 @@ import { encryptCommand } from "./commands/encrypt.js";
 import { splitCommand } from "./commands/split.js";
 import { updateCommand } from "./commands/update.js";
 import { reissueCommand } from "./commands/reissue.js";
+import { cleanupCommand } from "./commands/cleanup.js";
 
 const program = new Command();
 
@@ -39,5 +40,10 @@ program
   .description("Generate new key, re-encrypt, and create new share PDFs (invalidates old shares)")
   .option("-i, --input <file>", "Input plaintext file")
   .action(reissueCommand);
+
+program
+  .command("cleanup")
+  .description("Shred and delete all sensitive files in vault-workspace/")
+  .action(cleanupCommand);
 
 program.parse();

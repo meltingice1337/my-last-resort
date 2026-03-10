@@ -26,11 +26,19 @@ export default function RecoveryApp() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [vaultInfo, setVaultInfo] = useState(null); // { revision, updated }
   const resultRef = useRef(null);
 
   const threshold = shares.length > 0 ? shares[0].t : null;
   const total = shares.length > 0 ? shares[0].n : null;
   const canDecrypt = threshold && shares.length >= threshold;
+
+  // Fetch vault metadata on load
+  useEffect(() => {
+    fetchVault()
+      .then((vault) => setVaultInfo({ revision: vault.revision, updated: vault.updated }))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if ((decryptedSecret || error) && resultRef.current) {
@@ -144,6 +152,11 @@ export default function RecoveryApp() {
             <p className="text-sm sm:text-base text-gray-300">
               Gather shares from trusted holders to recover the secret.
             </p>
+            {vaultInfo && (
+              <p className="text-xs text-gray-500 mt-1">
+                Vault r{vaultInfo.revision} — {new Date(vaultInfo.updated).toLocaleString()}
+              </p>
+            )}
           </div>
 
           <div className="space-y-3 mb-4 sm:mb-6">
@@ -256,6 +269,12 @@ export default function RecoveryApp() {
     <div className="w-full h-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white overflow-y-auto flex flex-col p-4 sm:p-6 md:p-8">
       <div className="max-w-3xl mx-auto w-full">
         <Header />
+
+        {vaultInfo && (
+          <p className="text-xs text-gray-500 text-center -mt-6 mb-4">
+            Vault r{vaultInfo.revision} — {new Date(vaultInfo.updated).toLocaleString()}
+          </p>
+        )}
 
         <div className="bg-slate-800/50 rounded-xl p-4 sm:p-6 md:p-8 backdrop-blur">
           {!decryptedSecret && (

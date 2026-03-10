@@ -46,11 +46,12 @@ export async function reissueCommand(options: { input?: string }): Promise<void>
   await writeFile(PATHS.key, key.toString("hex") + "\n", { mode: 0o600 });
   console.log(chalk.green("Generated new .vault-key"));
 
-  // Re-encrypt
-  const vault = encrypt(plaintext, key);
+  // Re-encrypt — revision resets to 1 on reissue
+  const vault = encrypt(plaintext, key, 1);
   await mkdir("public", { recursive: true });
   await writeFile(PATHS.vaultOutput, JSON.stringify(vault, null, 2) + "\n");
   console.log(chalk.green(`Encrypted vault written to ${PATHS.vaultOutput}`));
+  console.log(chalk.dim(`Revision: 1 | Updated: ${vault.updated}`));
 
   // Split new key
   const keyHex = key.toString("hex");
@@ -59,11 +60,8 @@ export async function reissueCommand(options: { input?: string }): Promise<void>
   await mkdir(PATHS.shares, { recursive: true });
 
   for (const share of shares) {
-    const holder = config.holders[share.i - 1];
-    const safeName = holder.name.replace(/[^a-zA-Z0-9]/g, "-");
-    const filename = `${PATHS.shares}/share-${share.i}-${safeName}.pdf`;
-
-    await generateSharePDF(share, holder, config, filename);
+    const filename = `${PATHS.shares}/share-${share.i}.pdf`;
+    await generateSharePDF(share, config, filename);
     console.log(chalk.green(`  Created: ${filename}`));
   }
 

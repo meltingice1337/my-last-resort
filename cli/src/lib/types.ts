@@ -1,21 +1,15 @@
-export interface Holder {
-  name: string;
-  contact: string;
-}
-
 export interface VaultConfig {
   threshold: number;
   totalShares: number;
   repoUrl: string;
-  holders: Holder[];
 }
 
 export interface VaultJson {
   version: 1;
+  revision: number;
   updated: string;
   iv: string; // base64
   ciphertext: string; // base64 (ciphertext + auth tag)
-  hint?: string;
 }
 
 export interface SharePayload {
