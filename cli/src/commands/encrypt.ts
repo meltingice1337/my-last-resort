@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import chalk from "chalk";
 import { generateKey, encrypt } from "../lib/crypto.js";
@@ -31,8 +31,6 @@ export async function encryptCommand(options: { input?: string }): Promise<void>
     return;
   }
 
-  await mkdir(PATHS.workspace, { recursive: true });
-
   // Load or generate key
   let key: Buffer;
   if (existsSync(PATHS.key)) {
@@ -48,9 +46,13 @@ export async function encryptCommand(options: { input?: string }): Promise<void>
   const revision = getCurrentRevision() + 1;
   const vault = encrypt(plaintext, key, revision);
 
-  await mkdir("public", { recursive: true });
   await writeFile(PATHS.vaultOutput, JSON.stringify(vault, null, 2) + "\n");
 
-  console.log(chalk.green(`Encrypted vault written to ${PATHS.vaultOutput}`));
+  console.log(chalk.green(`\nEncrypted vault written to ${PATHS.vaultOutput}`));
   console.log(chalk.dim(`Revision: ${revision} | Updated: ${vault.updated}`));
+  console.log(chalk.dim("\nNext steps:"));
+  console.log(chalk.dim("  1. Run 'vault split' to generate Shamir share PDFs"));
+  console.log(chalk.dim("  2. Print and distribute share PDFs to holders"));
+  console.log(chalk.dim("  3. Run 'vault cleanup' to shred plaintext.txt and .vault-key"));
+  console.log(chalk.dim("\nTo update later: 'vault decrypt' → edit plaintext.txt → 'vault update'"));
 }

@@ -10,6 +10,7 @@
     "deploy-pages": "vite build && gh-pages -d dist && rm -rf dist",
     "cli:build": "pnpm --filter emergency-vault-cli build",
     "vault": "pnpm cli:build && node cli/dist/index.js",
+    "vault:web": "cp -f vault.json public/vault.json 2>/dev/null || echo 'No vault.json found — run vault encrypt first'",
     "vault:compile": "pnpm cli:build && bun build cli/dist/index.js --compile --outfile vault-cli --target=bun-linux-x64"
   },
   "keywords": [],
