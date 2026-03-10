@@ -77,7 +77,8 @@ export async function generateSharePDF(
   const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const fontMono = await doc.embedFont(StandardFonts.Courier);
 
-  const shareJson = JSON.stringify(share);
+  // Compact JSON with zero whitespace for clean copy-paste
+  const shareJson = JSON.stringify(share).replace(/\s/g, '');
 
   // Generate QR code as PNG buffer
   const qrBuffer = await QRCode.toBuffer(shareJson, {
