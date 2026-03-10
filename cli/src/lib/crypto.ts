@@ -9,7 +9,7 @@ export function generateKey(): Buffer {
   return randomBytes(KEY_LENGTH);
 }
 
-export function encrypt(plaintext: string, key: Buffer): VaultJson {
+export function encrypt(plaintext: string, key: Buffer, revision: number): VaultJson {
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
 
@@ -25,6 +25,7 @@ export function encrypt(plaintext: string, key: Buffer): VaultJson {
 
   return {
     version: 1,
+    revision,
     updated: new Date().toISOString(),
     iv: iv.toString("base64"),
     ciphertext: ciphertextWithTag.toString("base64"),

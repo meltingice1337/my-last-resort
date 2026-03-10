@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import chalk from "chalk";
 import { encrypt } from "../lib/crypto.js";
 import { PATHS } from "../lib/paths.js";
+import { getCurrentRevision } from "./encrypt.js";
 
 export async function updateCommand(options: { input?: string }): Promise<void> {
   const inputFile = options.input || PATHS.plaintext;
@@ -27,11 +28,12 @@ export async function updateCommand(options: { input?: string }): Promise<void> 
   const keyHex = (await readFile(PATHS.key, "utf8")).trim();
   const key = Buffer.from(keyHex, "hex");
 
-  const vault = encrypt(plaintext, key);
+  const revision = getCurrentRevision() + 1;
+  const vault = encrypt(plaintext, key, revision);
 
   await mkdir("public", { recursive: true });
   await writeFile(PATHS.vaultOutput, JSON.stringify(vault, null, 2) + "\n");
 
   console.log(chalk.green(`vault.json updated (same key — no share redistribution needed)`));
-  console.log(chalk.dim(`Updated: ${vault.updated}`));
+  console.log(chalk.dim(`Revision: ${revision} | Updated: ${vault.updated}`));
 }

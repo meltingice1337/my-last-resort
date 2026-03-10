@@ -1,8 +1,20 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import chalk from "chalk";
 import { generateKey, encrypt } from "../lib/crypto.js";
 import { PATHS } from "../lib/paths.js";
+import type { VaultJson } from "../lib/types.js";
+
+export function getCurrentRevision(): number {
+  try {
+    if (existsSync(PATHS.vaultOutput)) {
+      const raw = readFileSync(PATHS.vaultOutput, "utf8");
+      const vault: VaultJson = JSON.parse(raw);
+      return vault.revision || 0;
+    }
+  } catch {}
+  return 0;
+}
 
 export async function encryptCommand(options: { input?: string }): Promise<void> {
   const inputFile = options.input || PATHS.plaintext;
@@ -33,12 +45,12 @@ export async function encryptCommand(options: { input?: string }): Promise<void>
     console.log(chalk.green("Generated new .vault-key"));
   }
 
-  const vault = encrypt(plaintext, key);
+  const revision = getCurrentRevision() + 1;
+  const vault = encrypt(plaintext, key, revision);
 
   await mkdir("public", { recursive: true });
   await writeFile(PATHS.vaultOutput, JSON.stringify(vault, null, 2) + "\n");
 
   console.log(chalk.green(`Encrypted vault written to ${PATHS.vaultOutput}`));
-  console.log(chalk.dim(`Plaintext size: ${plaintext.length} chars`));
-  console.log(chalk.dim(`Updated: ${vault.updated}`));
+  console.log(chalk.dim(`Revision: ${revision} | Updated: ${vault.updated}`));
 }

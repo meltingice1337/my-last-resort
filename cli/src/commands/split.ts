@@ -22,11 +22,8 @@ export async function splitCommand(): Promise<void> {
   await mkdir(PATHS.shares, { recursive: true });
 
   for (const share of shares) {
-    const holder = config.holders[share.i - 1];
-    const safeName = holder.name.replace(/[^a-zA-Z0-9]/g, "-");
-    const filename = `${PATHS.shares}/share-${share.i}-${safeName}.pdf`;
-
-    await generateSharePDF(share, holder, config, filename);
+    const filename = `${PATHS.shares}/share-${share.i}.pdf`;
+    await generateSharePDF(share, config, filename);
     console.log(chalk.green(`  Created: ${filename}`));
   }
 

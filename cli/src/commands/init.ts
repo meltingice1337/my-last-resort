@@ -4,7 +4,7 @@ import { stdin, stdout } from "node:process";
 import chalk from "chalk";
 import { configExists, writeConfig } from "../lib/config.js";
 import { PATHS } from "../lib/paths.js";
-import type { Holder, VaultConfig } from "../lib/types.js";
+import type { VaultConfig } from "../lib/types.js";
 
 async function ask(rl: ReturnType<typeof createInterface>, question: string, defaultValue?: string): Promise<string> {
   const suffix = defaultValue ? ` (${defaultValue})` : "";
@@ -37,16 +37,7 @@ export async function initCommand(): Promise<void> {
 
     const repoUrl = await ask(rl, "Recovery website URL (GitHub Pages)", "");
 
-    const holders: Holder[] = [];
-    console.log(chalk.dim(`\nEnter holder info for each of the ${totalShares} shares (name + contact):`));
-
-    for (let i = 1; i <= totalShares; i++) {
-      const name = await ask(rl, `  Share #${i} holder name`, `Holder ${i}`);
-      const contact = await ask(rl, `  Share #${i} contact info`, "");
-      holders.push({ name, contact });
-    }
-
-    const config: VaultConfig = { threshold, totalShares, repoUrl, holders };
+    const config: VaultConfig = { threshold, totalShares, repoUrl };
 
     await mkdir(PATHS.workspace, { recursive: true });
     await writeConfig(config);

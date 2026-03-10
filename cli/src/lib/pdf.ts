@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from 'pdf-lib';
 import QRCode from 'qrcode';
-import type { SharePayload, Holder, VaultConfig } from './types.js';
+import type { SharePayload, VaultConfig } from './types.js';
 
 // A5 dimensions in points (148mm x 210mm)
 const A5_WIDTH = 420;
@@ -13,9 +13,7 @@ const COLORS = {
   gray: rgb(0.4, 0.4, 0.4),
   lightGray: rgb(0.7, 0.7, 0.7),
   red: rgb(0.8, 0.1, 0.1),
-  green: rgb(0.1, 0.5, 0.2),
   purple: rgb(0.35, 0.11, 0.53),
-  white: rgb(1, 1, 1),
 };
 
 function drawBox(
@@ -26,14 +24,7 @@ function drawBox(
   h: number,
   borderColor = COLORS.lightGray
 ) {
-  page.drawRectangle({
-    x,
-    y,
-    width: w,
-    height: h,
-    borderColor,
-    borderWidth: 1,
-  });
+  page.drawRectangle({ x, y, width: w, height: h, borderColor, borderWidth: 1 });
 }
 
 function drawText(
@@ -52,7 +43,6 @@ function wrapText(text: string, maxWidth: number, font: PDFFont, size: number): 
   const words = text.split(' ');
   const lines: string[] = [];
   let current = '';
-
   for (const word of words) {
     const test = current ? `${current} ${word}` : word;
     if (font.widthOfTextAtSize(test, size) > maxWidth) {
@@ -68,7 +58,6 @@ function wrapText(text: string, maxWidth: number, font: PDFFont, size: number): 
 
 export async function generateSharePDF(
   share: SharePayload,
-  holder: Holder,
   config: VaultConfig,
   outputPath: string
 ): Promise<void> {
@@ -80,7 +69,6 @@ export async function generateSharePDF(
   // Compact JSON with zero whitespace for clean copy-paste
   const shareJson = JSON.stringify(share).replace(/\s/g, '');
 
-  // Generate QR code as PNG buffer
   const qrBuffer = await QRCode.toBuffer(shareJson, {
     errorCorrectionLevel: 'M',
     margin: 1,
@@ -89,13 +77,8 @@ export async function generateSharePDF(
   });
   const qrImage = await doc.embedPng(qrBuffer);
 
-  // Page 1: Share Card
-  await drawShareCard(doc, share, holder, config, qrImage, shareJson, font, fontBold, fontMono);
-
-  // Page 2: Recovery Instructions
+  await drawShareCard(doc, share, qrImage, shareJson, font, fontBold, fontMono);
   await drawInstructions(doc, share, config, font, fontBold, fontMono);
-
-  // Page 3: Manual Console Recovery
   await drawConsoleRecovery(doc, config, font, fontBold, fontMono);
 
   const pdfBytes = await doc.save();
@@ -105,8 +88,6 @@ export async function generateSharePDF(
 async function drawShareCard(
   doc: PDFDocument,
   share: SharePayload,
-  holder: Holder,
-  config: VaultConfig,
   qrImage: Awaited<ReturnType<typeof PDFDocument.prototype.embedPng>>,
   shareJson: string,
   font: PDFFont,
@@ -117,41 +98,20 @@ async function drawShareCard(
   let y = A5_HEIGHT - 40;
 
   // Title
-  drawText(page, `EMERGENCY VAULT`, 30, y, fontBold, 18, COLORS.purple);
+  drawText(page, 'EMERGENCY VAULT', 30, y, fontBold, 18, COLORS.purple);
   y -= 22;
-  drawText(page, `SHARE #${share.i}`, 30, y, fontBold, 14, COLORS.darkGray);
+  drawText(page, `SHARE #${share.i} of ${share.n}`, 30, y, fontBold, 14, COLORS.darkGray);
   y -= 25;
 
   // Confidential warning
-  drawBox(page, 25, y - 40, A5_WIDTH - 50, 40, COLORS.red);
   page.drawRectangle({
-    x: 25,
-    y: y - 40,
-    width: A5_WIDTH - 50,
-    height: 40,
+    x: 25, y: y - 40, width: A5_WIDTH - 50, height: 40,
     color: rgb(1, 0.95, 0.95),
   });
   drawBox(page, 25, y - 40, A5_WIDTH - 50, 40, COLORS.red);
   drawText(page, 'CONFIDENTIAL — DO NOT SHARE THIS DOCUMENT', 35, y - 25, fontBold, 9, COLORS.red);
-  drawText(
-    page,
-    'Store securely. This is one piece of an emergency recovery system.',
-    35,
-    y - 36,
-    font,
-    7,
-    COLORS.gray
-  );
-  y -= 55;
-
-  // Holder info
-  drawText(page, `Holder: ${holder.name}`, 30, y, fontBold, 11, COLORS.darkGray);
-  y -= 14;
-  if (holder.contact) {
-    drawText(page, `Contact: ${holder.contact}`, 30, y, font, 9, COLORS.gray);
-    y -= 14;
-  }
-  y -= 10;
+  drawText(page, 'Store securely. This is one piece of an emergency recovery system.', 35, y - 36, font, 7, COLORS.gray);
+  y -= 60;
 
   // QR Code
   const qrSize = 200;
@@ -163,15 +123,12 @@ async function drawShareCard(
     page,
     'Scan this QR code at the recovery website',
     (A5_WIDTH - font.widthOfTextAtSize('Scan this QR code at the recovery website', 8)) / 2,
-    y,
-    font,
-    8,
-    COLORS.gray
+    y, font, 8, COLORS.gray
   );
   y -= 25;
 
-  // Hex fallback (wrapped monospace)
-  drawText(page, 'PLAIN TEXT FALLBACK:', 30, y, fontBold, 8, COLORS.darkGray);
+  // Plain text fallback
+  drawText(page, 'PLAIN TEXT FALLBACK (copy as one continuous string):', 30, y, fontBold, 8, COLORS.darkGray);
   y -= 12;
 
   const maxCharsPerLine = 60;
@@ -191,16 +148,12 @@ async function drawShareCard(
   drawText(
     page,
     `Share ${share.i} of ${share.n}  |  Threshold: ${share.t}  |  ${new Date().toLocaleDateString()}`,
-    30,
-    y,
-    font,
-    7,
-    COLORS.lightGray
+    30, y, font, 7, COLORS.lightGray
   );
 
   // Footer
   drawText(page, 'Emergency Vault — Recovery Share', 30, 20, font, 7, COLORS.lightGray);
-  drawText(page, `Page 1 of 3`, A5_WIDTH - 80, 20, font, 7, COLORS.lightGray);
+  drawText(page, 'Page 1 of 3', A5_WIDTH - 80, 20, font, 7, COLORS.lightGray);
 }
 
 async function drawInstructions(
@@ -230,7 +183,7 @@ async function drawInstructions(
     },
     {
       title: 'Step 3: Scan or paste each share',
-      body: 'Each holder scans their QR code or pastes the plain text JSON from their share card. The order does not matter.',
+      body: 'Each holder scans their QR code or pastes the plain text from their share card. The order does not matter.',
     },
     {
       title: 'Step 4: Decrypt',
@@ -249,44 +202,16 @@ async function drawInstructions(
     y -= 10;
   }
 
-  // Holder contact list
-  y -= 5;
-  drawText(page, 'ALL SHARE HOLDERS:', 30, y, fontBold, 10, COLORS.darkGray);
-  y -= 16;
-
-  for (let i = 0; i < config.holders.length; i++) {
-    const h = config.holders[i];
-    const line = `#${i + 1}: ${h.name}${h.contact ? ` — ${h.contact}` : ''}`;
-    drawText(page, line, 40, y, font, 9, COLORS.gray);
-    y -= 13;
-  }
-
-  y -= 15;
+  y -= 10;
   drawBox(page, 25, y - 50, A5_WIDTH - 50, 50, COLORS.red);
   drawText(page, 'SECURITY REMINDERS', 35, y - 12, fontBold, 9, COLORS.red);
   drawText(page, '- Never photograph or digitize this document', 35, y - 24, font, 8, COLORS.gray);
-  drawText(
-    page,
-    '- Destroy after use if the vault owner instructs you to',
-    35,
-    y - 35,
-    font,
-    8,
-    COLORS.gray
-  );
-  drawText(
-    page,
-    '- A single share alone cannot recover anything',
-    35,
-    y - 46,
-    font,
-    8,
-    COLORS.gray
-  );
+  drawText(page, '- Destroy after use if the vault owner instructs you to', 35, y - 35, font, 8, COLORS.gray);
+  drawText(page, '- A single share alone cannot recover anything', 35, y - 46, font, 8, COLORS.gray);
 
   // Footer
   drawText(page, 'Emergency Vault — Recovery Instructions', 30, 20, font, 7, COLORS.lightGray);
-  drawText(page, `Page 2 of 3`, A5_WIDTH - 80, 20, font, 7, COLORS.lightGray);
+  drawText(page, 'Page 2 of 3', A5_WIDTH - 80, 20, font, 7, COLORS.lightGray);
 }
 
 async function drawConsoleRecovery(
@@ -301,28 +226,12 @@ async function drawConsoleRecovery(
 
   drawText(page, 'MANUAL RECOVERY (LAST RESORT)', 30, y, fontBold, 14, COLORS.purple);
   y -= 20;
-  drawText(
-    page,
-    'If the recovery website is unavailable, use this browser console script.',
-    30,
-    y,
-    font,
-    9,
-    COLORS.gray
-  );
+  drawText(page, 'If the recovery website is unavailable, use this browser console script.', 30, y, font, 9, COLORS.gray);
   y -= 25;
 
   drawText(page, 'Prerequisites:', 30, y, fontBold, 10, COLORS.darkGray);
   y -= 14;
-  drawText(
-    page,
-    '- A modern web browser (Chrome, Firefox, Safari, Edge)',
-    40,
-    y,
-    font,
-    8,
-    COLORS.gray
-  );
+  drawText(page, '- A modern web browser (Chrome, Firefox, Safari, Edge)', 40, y, font, 8, COLORS.gray);
   y -= 12;
   drawText(page, '- Access to vault.json (or its contents)', 40, y, font, 8, COLORS.gray);
   y -= 12;
@@ -331,40 +240,19 @@ async function drawConsoleRecovery(
 
   drawText(page, 'Instructions:', 30, y, fontBold, 10, COLORS.darkGray);
   y -= 14;
-  drawText(
-    page,
-    '1. Open browser DevTools (F12) and go to Console tab',
-    40,
-    y,
-    font,
-    8,
-    COLORS.gray
-  );
+  drawText(page, '1. Open browser DevTools (F12) and go to Console tab', 40, y, font, 8, COLORS.gray);
   y -= 12;
-  drawText(
-    page,
-    '2. Copy and paste the script below, then press Enter',
-    40,
-    y,
-    font,
-    8,
-    COLORS.gray
-  );
+  drawText(page, '2. Copy and paste the script below, then press Enter', 40, y, font, 8, COLORS.gray);
   y -= 12;
   drawText(page, '3. Follow the on-screen prompts', 40, y, font, 8, COLORS.gray);
   y -= 20;
 
-  // Console script
   const script = [
     `(async()=>{`,
-    `  // Load Shamir library`,
     `  await new Promise(r=>{let s=document.createElement('script');`,
     `    s.src='https://cdn.jsdelivr.net/npm/secrets.js-grempe@2.0.0/secrets.min.js';`,
     `    s.onload=r;document.head.append(s)});`,
-    ``,
     `  window.recover=async function(shares,vaultUrl){`,
-    `    // shares = array of JSON strings from share cards`,
-    `    // vaultUrl = URL to vault.json`,
     `    const parsed=shares.map(s=>`,
     `      typeof s==='string'?JSON.parse(s):s);`,
     `    const hexes=parsed.map(p=>p.s);`,
@@ -381,20 +269,16 @@ async function drawConsoleRecovery(
     `    const pt=await crypto.subtle.decrypt(`,
     `      {name:'AES-GCM',iv},ck,ct);`,
     `    const text=new TextDecoder().decode(pt);`,
-    `    console.log('SECRET:',text);`,
-    `    return text;`,
+    `    console.log('SECRET:',text);return text;`,
     `  };`,
     `  console.log('Ready! Use:');`,
-    `  console.log('recover([share1,share2,share3],"<vault.json URL>")');`,
+    `  console.log('recover([share1,share2,share3],"<URL>")');`,
     `})();`,
   ];
 
   const boxHeight = script.length * 9 + 12;
   page.drawRectangle({
-    x: 25,
-    y: y - boxHeight,
-    width: A5_WIDTH - 50,
-    height: boxHeight,
+    x: 25, y: y - boxHeight, width: A5_WIDTH - 50, height: boxHeight,
     color: rgb(0.95, 0.95, 0.97),
   });
   drawBox(page, 25, y - boxHeight, A5_WIDTH - 50, boxHeight);
@@ -411,17 +295,9 @@ async function drawConsoleRecovery(
   }
 
   drawBox(page, 25, y - 30, A5_WIDTH - 50, 30, COLORS.red);
-  drawText(
-    page,
-    'After recovery, close all browser tabs and clear console history.',
-    35,
-    y - 18,
-    fontBold,
-    8,
-    COLORS.red
-  );
+  drawText(page, 'After recovery, close all browser tabs and clear console history.', 35, y - 18, fontBold, 8, COLORS.red);
 
   // Footer
   drawText(page, 'Emergency Vault — Manual Recovery Script', 30, 20, font, 7, COLORS.lightGray);
-  drawText(page, `Page 3 of 3`, A5_WIDTH - 80, 20, font, 7, COLORS.lightGray);
+  drawText(page, 'Page 3 of 3', A5_WIDTH - 80, 20, font, 7, COLORS.lightGray);
 }
