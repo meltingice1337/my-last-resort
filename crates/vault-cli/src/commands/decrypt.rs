@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
@@ -28,19 +29,15 @@ pub fn run(output: &str) -> Result<()> {
     let key_hex = fs::read_to_string(KEY_FILE)?;
     let key = crypto::key_from_hex(&key_hex)?;
 
-    let plaintext = match crypto::decrypt(&vault, &key) {
-        Ok(pt) => pt,
-        Err(_) => {
-            println!(
-                "{}",
-                "Decryption failed — wrong key or corrupted vault.json.".red()
-            );
-            return Ok(());
-        }
+    let Ok(plaintext) = crypto::decrypt(&vault, &key) else {
+        println!(
+            "{}",
+            "Decryption failed — wrong key or corrupted vault.json.".red()
+        );
+        return Ok(());
     };
 
     // Write with mode 0o600
-    use std::io::Write;
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -52,11 +49,7 @@ pub fn run(output: &str) -> Result<()> {
     println!("{}", format!("\nDecrypted to {output}").green());
     println!(
         "{}",
-        format!(
-            "Revision: {} | Updated: {}",
-            vault.revision, vault.updated
-        )
-        .dimmed()
+        format!("Revision: {} | Updated: {}", vault.revision, vault.updated).dimmed()
     );
     println!("{}", "\nNext steps:".dimmed());
     println!(

@@ -53,11 +53,11 @@ pub fn run() -> Result<()> {
     }
 
     // Collect share PDFs
-    if Path::new(SHARES_DIR).exists() {
-        if let Ok(entries) = fs::read_dir(SHARES_DIR) {
-            for entry in entries.flatten() {
-                files.push(entry.path().to_string_lossy().to_string());
-            }
+    if Path::new(SHARES_DIR).exists()
+        && let Ok(entries) = fs::read_dir(SHARES_DIR)
+    {
+        for entry in entries.flatten() {
+            files.push(entry.path().to_string_lossy().to_string());
         }
     }
 
@@ -88,10 +88,7 @@ pub fn run() -> Result<()> {
         "{}",
         "Remaining files (safe to keep): vault.json, vault.config.json".dimmed()
     );
-    println!(
-        "{}",
-        "Also clear your shell history: history -c".dimmed()
-    );
+    println!("{}", "Also clear your shell history: history -c".dimmed());
 
     Ok(())
 }

@@ -19,7 +19,7 @@ hex = "0.4"
 zeroize.workspace = true
 colored = "3"
 dialoguer = "0.11"
-chrono = "0.4"
+chrono = "0.4.34"
 qrcode = "0.14"
 image = { version = "0.25", default-features = false, features = ["png"] }
 anyhow.workspace = true
