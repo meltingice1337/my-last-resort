@@ -1,0 +1,8 @@
+node_modules/
+dist/
+cli/dist/
+.vault-key
+plaintext.txt
+shares/
+target/
+packages/vault-wasm/
