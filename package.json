@@ -13,7 +13,7 @@
     "cli:bump": "scripts/bump.sh cli",
     "cli:release": "scripts/release.sh",
     "web:bump": "scripts/bump.sh web",
-    "web:deploy": "pnpm build && gh-pages -d dist && rm -rf dist",
+    "web:deploy": "scripts/deploy.sh",
     "vault:stage": "cp -f vault.json public/vault.json 2>/dev/null || echo 'No vault.json found — run vault encrypt first'"
   },
   "keywords": [],

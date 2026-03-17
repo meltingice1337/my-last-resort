@@ -156,6 +156,7 @@ export default function RecoveryApp() {
                 Vault r{vaultInfo.revision} — {new Date(vaultInfo.updated).toLocaleString()}
               </p>
             )}
+            <p className="text-xs text-gray-600 mt-1">v{__APP_VERSION__}</p>
           </div>
 
           <div className="space-y-3 mb-4 sm:mb-6">
@@ -271,7 +272,7 @@ export default function RecoveryApp() {
 
         {vaultInfo && (
           <p className="text-xs text-gray-500 text-center -mt-6 mb-4">
-            Vault r{vaultInfo.revision} — {new Date(vaultInfo.updated).toLocaleString()}
+            Vault r{vaultInfo.revision} — {new Date(vaultInfo.updated).toLocaleString()} — v{__APP_VERSION__}
           </p>
         )}
 
