@@ -27,10 +27,22 @@ else
   VERSION="$CURRENT"
 fi
 
+# Build changelog from commits since last tag
+LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+if [[ -n "$LAST_TAG" ]]; then
+  CHANGELOG=$(git log "$LAST_TAG"..HEAD --pretty=format:"- %s" --no-merges)
+else
+  CHANGELOG=$(git log --pretty=format:"- %s" --no-merges)
+fi
+
+echo ""
+echo "Changelog:"
+echo "$CHANGELOG"
 echo ""
 read -rp "Tag and push v$VERSION? [Y/n] " confirm
 if [[ "${confirm:-Y}" =~ ^[Yy]$ ]]; then
-  git tag -a "v$VERSION" -m "v$VERSION"
+  git push origin HEAD
+  git tag -a "v$VERSION" -m "$(printf "v$VERSION\n\n$CHANGELOG")"
   git push origin "v$VERSION"
   echo "Released v$VERSION"
 else
