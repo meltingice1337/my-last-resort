@@ -2,23 +2,25 @@ use anyhow::{Context, Result};
 use printpdf::path::PaintMode;
 use printpdf::{
     BuiltinFont, Color, ColorBits, ColorSpace, Image, ImageTransform, ImageXObject,
-    IndirectFontRef, Mm, PdfDocument, PdfDocumentReference, PdfLayerIndex, PdfLayerReference,
-    PdfPageIndex, Px, Rect, Rgb,
+    IndirectFontRef, Mm, PdfDocument, PdfLayerReference, Px, Rect, Rgb,
 };
 
 use crate::types::VaultConfig;
 use vault_core::types::SharePayload;
 
-// A5 dimensions in mm
-const A5_W: f32 = 148.0;
-const A5_H: f32 = 210.0;
+// A4 landscape = two A5 portrait halves side by side
+const A4_W: f32 = 297.0;
+const A4_H: f32 = 210.0;
+const HALF_W: f32 = A4_W / 2.0; // 148.5mm ≈ A5 width
 
-// Colors
-const PURPLE: (f32, f32, f32) = (0.35, 0.11, 0.53);
-const RED: (f32, f32, f32) = (0.8, 0.1, 0.1);
-const DARK_GRAY: (f32, f32, f32) = (0.2, 0.2, 0.2);
-const GRAY: (f32, f32, f32) = (0.4, 0.4, 0.4);
-const LIGHT_GRAY: (f32, f32, f32) = (0.7, 0.7, 0.7);
+// Margins within each A5 half
+const MARGIN: f32 = 10.0;
+const CARD_W: f32 = HALF_W - 2.0 * MARGIN;
+
+// Colors — optimized for B&W printing
+const BLACK: (f32, f32, f32) = (0.0, 0.0, 0.0);
+const SOFT: (f32, f32, f32) = (0.35, 0.35, 0.35); // only for footers/metadata
+const BORDER: (f32, f32, f32) = (0.6, 0.6, 0.6); // boxes, cut line, separators
 
 fn color(r: f32, g: f32, b: f32) -> Color {
     Color::Rgb(Rgb::new(r, g, b, None))
@@ -86,28 +88,56 @@ pub fn generate_share_pdf(
     config: &VaultConfig,
     output_path: &str,
 ) -> Result<()> {
-    let (doc, page1, layer1) =
-        PdfDocument::new("Emergency Vault Share", Mm(A5_W), Mm(A5_H), "Layer 1");
+    let (doc, page, layer_idx) =
+        PdfDocument::new("Emergency Vault Share", Mm(A4_W), Mm(A4_H), "Layer 1");
 
     let font = doc.add_builtin_font(BuiltinFont::Helvetica)?;
     let font_bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)?;
-    let font_mono = doc.add_builtin_font(BuiltinFont::Courier)?;
+    let font_mono = doc.add_builtin_font(BuiltinFont::CourierBold)?;
 
+    let layer = doc.get_page(page).get_layer(layer_idx);
     let share_compact = share.encode();
 
-    // Page 1: Share Card
+    // Dashed cut line down the middle
+    layer.set_outline_color(color(BORDER.0, BORDER.1, BORDER.2));
+    layer.set_outline_thickness(0.3);
+    // Draw small dashes manually (printpdf doesn't support dash patterns easily)
+    let dash_len = 3.0;
+    let gap_len = 3.0;
+    let mut dy = 5.0;
+    while dy < A4_H - 5.0 {
+        let end = (dy + dash_len).min(A4_H - 5.0);
+        layer.add_rect(
+            Rect::new(Mm(HALF_W - 0.05), Mm(dy), Mm(HALF_W + 0.05), Mm(end))
+                .with_mode(PaintMode::FillStroke),
+        );
+        dy += dash_len + gap_len;
+    }
+
+    // Scissor icon hint at top of cut line
+    draw_text(
+        &layer,
+        "- - -",
+        HALF_W - 4.0,
+        A4_H - 4.0,
+        &font,
+        6.0,
+        BORDER,
+    );
+
+    // Left half: Share Card (x offset = 0)
     draw_share_card(
-        &doc, page1, layer1, share, &share_compact,
-        &font, &font_bold, &font_mono,
+        &layer,
+        0.0,
+        share,
+        &share_compact,
+        &font,
+        &font_bold,
+        &font_mono,
     )?;
 
-    // Page 2: Recovery Instructions
-    let (page2, layer2) = doc.add_page(Mm(A5_W), Mm(A5_H), "Layer 1");
-    draw_instructions(&doc, page2, layer2, share, config, &font, &font_bold)?;
-
-    // Page 3: Manual Recovery
-    let (page3, layer3) = doc.add_page(Mm(A5_W), Mm(A5_H), "Layer 1");
-    draw_manual_recovery(&doc, page3, layer3, config, &font, &font_bold, &font_mono)?;
+    // Right half: Recovery Page (x offset = HALF_W)
+    draw_recovery_page(&layer, HALF_W, share, config, &font, &font_bold, &font_mono)?;
 
     let pdf_bytes = doc.save_to_bytes()?;
     std::fs::write(output_path, pdf_bytes).context("Failed to write PDF")?;
@@ -115,39 +145,56 @@ pub fn generate_share_pdf(
 }
 
 fn draw_share_card(
-    doc: &PdfDocumentReference,
-    page_idx: PdfPageIndex,
-    layer_idx: PdfLayerIndex,
+    layer: &PdfLayerReference,
+    x_off: f32,
     share: &SharePayload,
     share_compact: &str,
     font: &IndirectFontRef,
     font_bold: &IndirectFontRef,
     font_mono: &IndirectFontRef,
 ) -> Result<()> {
-    let layer = doc.get_page(page_idx).get_layer(layer_idx);
-
-    // Y coordinates: printpdf uses bottom-left origin, top of A5 = 210mm
-    let mut y = A5_H - 14.0;
+    let l = x_off + MARGIN; // left edge of content
+    let mut y = A4_H - MARGIN;
 
     // Title
-    draw_text(&layer, "EMERGENCY VAULT", 10.0, y, font_bold, 18.0, PURPLE);
-    y -= 7.0;
+    draw_text(layer, "EMERGENCY VAULT", l, y, font_bold, 16.0, BLACK);
+    y -= 6.0;
     draw_text(
-        &layer,
+        layer,
         &format!("SHARE #{} of {}", share.i, share.n),
-        10.0, y, font_bold, 14.0, DARK_GRAY,
+        l,
+        y,
+        font_bold,
+        12.0,
+        BLACK,
     );
-    y -= 9.0;
+    y -= 8.0;
 
     // Confidential warning box
-    let box_h = 14.0;
-    draw_rect_fill(&layer, 8.0, y - box_h, A5_W - 16.0, box_h, (1.0, 0.95, 0.95), RED);
-    draw_text(&layer, "CONFIDENTIAL — DO NOT SHARE THIS DOCUMENT", 11.0, y - 5.0, font_bold, 9.0, RED);
-    draw_text(&layer, "Store securely. This is one piece of an emergency recovery system.", 11.0, y - 10.0, font, 7.0, GRAY);
-    y -= box_h + 7.0;
+    let box_h = 12.0;
+    draw_rect_fill(layer, l, y - box_h, CARD_W, box_h, (0.93, 0.93, 0.93), BORDER);
+    draw_text(
+        layer,
+        "CONFIDENTIAL — DO NOT SHARE THIS DOCUMENT",
+        l + 2.0,
+        y - 4.5,
+        font_bold,
+        7.5,
+        BLACK,
+    );
+    draw_text(
+        layer,
+        "Store securely. This is one piece of an emergency recovery system.",
+        l + 2.0,
+        y - 9.0,
+        font,
+        7.0,
+        BLACK,
+    );
+    y -= box_h + 5.0;
 
-    // QR Code — compact string is much shorter than JSON, yields smaller QR
-    let code = qrcode::QrCode::with_error_correction_level(share_compact, qrcode::EcLevel::M)
+    // QR Code (centered in left half)
+    let code = qrcode::QrCode::with_error_correction_level(share_compact, qrcode::EcLevel::H)
         .map_err(|e| anyhow::anyhow!("QR generation failed: {e}"))?;
     let qr_img: ::image::GrayImage = code.render::<::image::Luma<u8>>().quiet_zone(true).build();
     let (pw, ph) = (qr_img.width(), qr_img.height());
@@ -164,8 +211,8 @@ fn draw_share_card(
         clipping_bbox: None,
     };
 
-    let qr_size_mm = 60.0;
-    let qr_x = (A5_W - qr_size_mm) / 2.0;
+    let qr_size_mm = 55.0;
+    let qr_x = x_off + (HALF_W - qr_size_mm) / 2.0;
     let pdf_image = Image::from(image_xobject);
     pdf_image.add_to_layer(
         layer.clone(),
@@ -176,200 +223,299 @@ fn draw_share_card(
             ..Default::default()
         },
     );
-    y -= qr_size_mm + 4.0;
+    y -= qr_size_mm + 3.0;
 
     // Caption
-    draw_text(&layer, "Scan this QR code at the recovery website", 25.0, y, font, 8.0, GRAY);
-    y -= 8.0;
+    draw_text(
+        layer,
+        "Scan this QR code at the recovery website",
+        l + 8.0,
+        y,
+        font,
+        8.0,
+        BLACK,
+    );
+    y -= 7.0;
 
-    // Plain text fallback — compact string fits on one line
-    draw_text(&layer, "PLAIN TEXT FALLBACK:", 10.0, y, font_bold, 8.0, DARK_GRAY);
-    y -= 4.0;
-
-    let box_height = 7.0;
-    draw_rect_stroke(&layer, 8.0, y - box_height, A5_W - 16.0, box_height, LIGHT_GRAY);
+    // Plain text fallback — black bold mono, single line
+    draw_text(
+        layer,
+        "PLAIN TEXT FALLBACK:",
+        l,
+        y,
+        font_bold,
+        8.0,
+        BLACK,
+    );
     y -= 4.5;
-    draw_text(&layer, share_compact, 10.0, y, font_mono, 7.0, DARK_GRAY);
-    y -= 5.0;
+    let fb_h = 8.0;
+    draw_rect_fill(
+        layer,
+        l,
+        y - fb_h,
+        CARD_W,
+        fb_h,
+        (0.95, 0.95, 0.95),
+        BORDER,
+    );
+    draw_text(
+        layer,
+        share_compact,
+        l + 2.0,
+        y - 5.5,
+        font_mono,
+        7.5,
+        (0.0, 0.0, 0.0),
+    );
+    y -= fb_h + 3.0;
 
     // Metadata
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     draw_text(
-        &layer,
-        &format!("Share {} of {}  |  Threshold: {}  |  {}", share.i, share.n, share.t, date),
-        10.0, y, font, 7.0, LIGHT_GRAY,
+        layer,
+        &format!(
+            "Share {} of {}  |  Threshold: {}  |  {}",
+            share.i, share.n, share.t, date
+        ),
+        l,
+        y,
+        font,
+        6.5,
+        SOFT,
     );
 
     // Footer
-    draw_text(&layer, "Emergency Vault — Recovery Share", 10.0, 5.0, font, 7.0, LIGHT_GRAY);
-    draw_text(&layer, "Page 1 of 3", A5_W - 28.0, 5.0, font, 7.0, LIGHT_GRAY);
+    draw_text(
+        layer,
+        "Emergency Vault — Recovery Share",
+        l,
+        6.0,
+        font,
+        6.0,
+        SOFT,
+    );
+    draw_text(
+        layer,
+        "Card 1 of 2",
+        x_off + HALF_W - MARGIN - 17.0,
+        6.0,
+        font,
+        6.0,
+        SOFT,
+    );
 
     Ok(())
 }
 
-fn draw_instructions(
-    doc: &PdfDocumentReference,
-    page_idx: PdfPageIndex,
-    layer_idx: PdfLayerIndex,
+fn draw_recovery_page(
+    layer: &PdfLayerReference,
+    x_off: f32,
     share: &SharePayload,
-    config: &VaultConfig,
-    font: &IndirectFontRef,
-    font_bold: &IndirectFontRef,
-) -> Result<()> {
-    let layer = doc.get_page(page_idx).get_layer(layer_idx);
-    let mut y = A5_H - 14.0;
-
-    draw_text(&layer, "RECOVERY INSTRUCTIONS", 10.0, y, font_bold, 16.0, PURPLE);
-    y -= 10.0;
-
-    let steps = [
-        ("Step 1: Gather shares", format!(
-            "You need at least {} of {} share holders to recover the secret. Contact the other holders and coordinate.",
-            share.t, share.n
-        )),
-        ("Step 2: Access the recovery tool", if config.repo_url.is_empty() {
-            "Access the Emergency Vault recovery website.".to_string()
-        } else {
-            format!("Go to: {}", config.repo_url)
-        }),
-        ("Step 3: Scan or paste each share",
-            "Each holder scans their QR code or pastes the vault:... string from their share card. The order does not matter.".to_string()
-        ),
-        ("Step 4: Decrypt", format!(
-            "Once {} shares are entered, click \"Decrypt\" to recover the secret. The tool will fetch the encrypted vault and decrypt it using the reconstructed key.",
-            share.t
-        )),
-    ];
-
-    for (title, body) in &steps {
-        draw_text(&layer, title, 10.0, y, font_bold, 11.0, DARK_GRAY);
-        y -= 5.0;
-        for line in wrap_text(body, 65) {
-            draw_text(&layer, &line, 14.0, y, font, 9.0, GRAY);
-            y -= 4.5;
-        }
-        y -= 3.0;
-    }
-
-    y -= 3.0;
-
-    // Security reminders box
-    let sec_h = 18.0;
-    draw_rect_stroke(&layer, 8.0, y - sec_h, A5_W - 16.0, sec_h, RED);
-    draw_text(&layer, "SECURITY REMINDERS", 11.0, y - 4.0, font_bold, 9.0, RED);
-    draw_text(&layer, "- Never photograph or digitize this document", 11.0, y - 8.5, font, 8.0, GRAY);
-    draw_text(&layer, "- Destroy after use if the vault owner instructs you to", 11.0, y - 12.5, font, 8.0, GRAY);
-    draw_text(&layer, "- A single share alone cannot recover anything", 11.0, y - 16.5, font, 8.0, GRAY);
-
-    // Footer
-    draw_text(&layer, "Emergency Vault — Recovery Instructions", 10.0, 5.0, font, 7.0, LIGHT_GRAY);
-    draw_text(&layer, "Page 2 of 3", A5_W - 28.0, 5.0, font, 7.0, LIGHT_GRAY);
-
-    Ok(())
-}
-
-fn draw_manual_recovery(
-    doc: &PdfDocumentReference,
-    page_idx: PdfPageIndex,
-    layer_idx: PdfLayerIndex,
     config: &VaultConfig,
     font: &IndirectFontRef,
     font_bold: &IndirectFontRef,
     font_mono: &IndirectFontRef,
 ) -> Result<()> {
-    let layer = doc.get_page(page_idx).get_layer(layer_idx);
-    let mut y = A5_H - 14.0;
+    let l = x_off + MARGIN;
+    let mut y = A4_H - MARGIN;
 
-    draw_text(&layer, "MANUAL RECOVERY (LAST RESORT)", 10.0, y, font_bold, 14.0, PURPLE);
+    // === RECOVERY INSTRUCTIONS ===
+    draw_text(
+        layer,
+        "RECOVERY INSTRUCTIONS",
+        l,
+        y,
+        font_bold,
+        11.0,
+        BLACK,
+    );
     y -= 7.0;
-    draw_text(&layer, "If the recovery website is unavailable, use this browser console script.", 10.0, y, font, 9.0, GRAY);
-    y -= 8.0;
 
-    draw_text(&layer, "Prerequisites:", 10.0, y, font_bold, 10.0, DARK_GRAY);
-    y -= 5.0;
-    for prereq in [
-        "- A modern web browser (Chrome, Firefox, Safari, Edge)",
-        "- Access to vault.json (or its contents)",
-        &format!("- At least {} share strings (vault:...)", config.threshold),
-    ] {
-        draw_text(&layer, prereq, 14.0, y, font, 8.0, GRAY);
-        y -= 4.0;
-    }
-    y -= 3.0;
+    let steps = [
+        ("1. Gather shares", format!(
+            "You need at least {} of {} holders. Contact them and coordinate.",
+            share.t, share.n
+        )),
+        ("2. Access recovery tool", if config.repo_url.is_empty() {
+            "Access the Emergency Vault recovery website.".to_string()
+        } else {
+            format!("Go to: {}", config.repo_url)
+        }),
+        ("3. Scan or paste shares",
+            "Each holder scans their QR code or pastes the vault:... string. Order does not matter.".to_string()
+        ),
+        ("4. Decrypt", format!(
+            "Once {} shares are entered, click \"Decrypt\" to recover the secret.",
+            share.t
+        )),
+    ];
 
-    draw_text(&layer, "Instructions:", 10.0, y, font_bold, 10.0, DARK_GRAY);
-    y -= 5.0;
-    for instr in [
-        "1. Open browser DevTools (F12) and go to Console tab",
-        "2. Copy and paste the script below, then press Enter",
-        "3. Follow the on-screen prompts",
-    ] {
-        draw_text(&layer, instr, 14.0, y, font, 8.0, GRAY);
+    for (title, body) in &steps {
+        draw_text(layer, title, l, y, font_bold, 8.5, BLACK);
         y -= 4.0;
+        for line in wrap_text(body, 55) {
+            draw_text(layer, &line, l + 3.0, y, font, 7.5, BLACK);
+            y -= 3.5;
+        }
+        y -= 1.5;
     }
+
+    // Security
+    y -= 0.5;
+    draw_text(layer, "SECURITY:", l, y, font_bold, 7.5, BLACK);
+    draw_text(
+        layer,
+        "Never photograph this. Destroy after use if instructed.",
+        l + 18.0,
+        y,
+        font,
+        7.0,
+        BLACK,
+    );
     y -= 4.0;
 
+    // Separator
+    layer.set_outline_color(color(BORDER.0, BORDER.1, BORDER.2));
+    layer.set_outline_thickness(0.3);
+    layer.add_rect(
+        Rect::new(Mm(l), Mm(y), Mm(x_off + HALF_W - MARGIN), Mm(y + 0.1))
+            .with_mode(PaintMode::Stroke),
+    );
+    y -= 4.0;
+
+    // === MANUAL RECOVERY ===
+    draw_text(
+        layer,
+        "MANUAL RECOVERY (LAST RESORT)",
+        l,
+        y,
+        font_bold,
+        9.0,
+        BLACK,
+    );
+    y -= 4.5;
+    draw_text(
+        layer,
+        "If the website is unavailable, use this browser console script.",
+        l,
+        y,
+        font,
+        7.0,
+        BLACK,
+    );
+    y -= 4.0;
+
+    draw_text(layer, "Prerequisites:", l, y, font_bold, 7.0, BLACK);
+    draw_text(
+        layer,
+        &format!("Browser, vault.json, {} share strings", config.threshold),
+        l + 23.0,
+        y,
+        font,
+        7.0,
+        BLACK,
+    );
+    y -= 3.5;
+    draw_text(layer, "Steps:", l, y, font_bold, 7.0, BLACK);
+    draw_text(
+        layer,
+        "F12 > Console > Paste script > Enter",
+        l + 12.0,
+        y,
+        font,
+        7.0,
+        BLACK,
+    );
+    y -= 4.0;
+
+    // Recovery script
     let script_lines = vec![
         "(async()=>{".to_string(),
-        format!("  const WASM='{}/assets/vault_wasm_bg.wasm';", config.repo_url),
+        format!(
+            "  const WASM='{}/assets/vault_wasm_bg.wasm';",
+            config.repo_url
+        ),
         format!("  const JS='{}/assets/vault_wasm.js';", config.repo_url),
-        "  const mod=await import(JS);".to_string(),
-        "  await mod.default(WASM);".to_string(),
+        "  const mod=await import(JS); await mod.default(WASM);".to_string(),
         "  window.recover=async function(shares,vaultUrl){".to_string(),
-        "    // shares = ['vault:...','vault:...',...]".to_string(),
-        "    const json=JSON.stringify(shares);".to_string(),
-        "    const keyHex=mod.combine_shares(json);".to_string(),
+        "    const keyHex=mod.combine_shares(JSON.stringify(shares));".to_string(),
         "    const vault=await(await fetch(vaultUrl)).json();".to_string(),
-        "    const key=new Uint8Array(".to_string(),
-        "      keyHex.match(/.{2}/g).map(b=>parseInt(b,16)));".to_string(),
-        "    const iv=Uint8Array.from(atob(vault.iv),".to_string(),
-        "      c=>c.charCodeAt(0));".to_string(),
-        "    const ct=Uint8Array.from(atob(vault.ciphertext),".to_string(),
-        "      c=>c.charCodeAt(0));".to_string(),
+        "    const hex=s=>new Uint8Array(s.match(/.{2}/g).map(b=>parseInt(b,16)));".to_string(),
+        "    const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));".to_string(),
         "    const ck=await crypto.subtle.importKey(".to_string(),
-        "      'raw',key,{name:'AES-GCM'},false,['decrypt']);".to_string(),
+        "      'raw',hex(keyHex),{name:'AES-GCM'},false,['decrypt']);".to_string(),
         "    const pt=await crypto.subtle.decrypt(".to_string(),
-        "      {name:'AES-GCM',iv},ck,ct);".to_string(),
+        "      {name:'AES-GCM',iv:b64(vault.iv)},ck,b64(vault.ciphertext));".to_string(),
         "    const text=new TextDecoder().decode(pt);".to_string(),
-        "    console.log('SECRET:',text);return text;".to_string(),
+        "    console.log('RECOVERED:',text); return text;".to_string(),
         "  };".to_string(),
-        "  console.log('Ready! Use:');".to_string(),
-        "  console.log('recover([\"vault:...\"],\"<URL>\")');".to_string(),
+        "  console.log('Ready! recover([\"vault:...\"],\"url\")');".to_string(),
         "})();".to_string(),
     ];
 
-    let box_height = script_lines.len() as f32 * 3.2 + 4.0;
+    let line_h = 3.5;
+    let box_h = script_lines.len() as f32 * line_h + 3.0;
     draw_rect_fill(
-        &layer, 8.0, y - box_height, A5_W - 16.0, box_height,
-        (0.95, 0.95, 0.97), LIGHT_GRAY,
+        layer,
+        l,
+        y - box_h,
+        CARD_W,
+        box_h,
+        (0.93, 0.93, 0.93),
+        BORDER,
     );
 
     for line in &script_lines {
-        y -= 3.2;
-        draw_text(&layer, line, 10.0, y, font_mono, 6.5, DARK_GRAY);
+        y -= line_h;
+        draw_text(layer, line, l + 1.5, y, font_mono, 8.0, (0.0, 0.0, 0.0));
     }
-    y -= 7.0;
+    y -= 4.5;
 
     if !config.repo_url.is_empty() {
         draw_text(
-            &layer,
-            &format!("Vault URL: {}/vault.json", config.repo_url),
-            10.0, y, font, 8.0, GRAY,
+            layer,
+            &format!("Vault: {}/vault.json", config.repo_url),
+            l,
+            y,
+            font,
+            7.0,
+            BLACK,
         );
-        y -= 5.0;
+        y -= 4.0;
     }
 
-    let warn_h = 10.0;
-    draw_rect_stroke(&layer, 8.0, y - warn_h, A5_W - 16.0, warn_h, RED);
+    // Warning
+    let warn_h = 7.0;
+    draw_rect_stroke(layer, l, y - warn_h, CARD_W, warn_h, BORDER);
     draw_text(
-        &layer,
-        "After recovery, close all browser tabs and clear console history.",
-        11.0, y - 6.5, font_bold, 8.0, RED,
+        layer,
+        "After recovery, close all tabs and clear console history.",
+        l + 2.0,
+        y - 4.5,
+        font_bold,
+        7.0,
+        BLACK,
     );
 
     // Footer
-    draw_text(&layer, "Emergency Vault — Manual Recovery Script", 10.0, 5.0, font, 7.0, LIGHT_GRAY);
-    draw_text(&layer, "Page 3 of 3", A5_W - 28.0, 5.0, font, 7.0, LIGHT_GRAY);
+    draw_text(
+        layer,
+        "Emergency Vault — Recovery & Manual Instructions",
+        l,
+        6.0,
+        font,
+        6.0,
+        SOFT,
+    );
+    draw_text(
+        layer,
+        "Card 2 of 2",
+        x_off + HALF_W - MARGIN - 17.0,
+        6.0,
+        font,
+        6.0,
+        SOFT,
+    );
 
     Ok(())
 }
