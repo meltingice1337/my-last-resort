@@ -28,7 +28,8 @@ if [[ "$TARGET" == "cli" ]]; then
   NEW=$(bump_version "$CURRENT" "$PART")
   sed -i "0,/^version = \"$CURRENT\"/s//version = \"$NEW\"/" "$FILE"
   echo "CLI: $CURRENT → $NEW"
-  git add "$FILE"
+  cargo generate-lockfile --quiet
+  git add "$FILE" Cargo.lock
   git commit -m "chore: bump CLI to v$NEW"
 else
   CURRENT=$(node -p "require('./package.json').version")
