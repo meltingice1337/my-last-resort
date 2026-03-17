@@ -46,10 +46,10 @@ export default function RecoveryApp() {
     }
   }, [decryptedSecret, error]);
 
-  const addShare = (raw) => {
-    const parsed = parseShare(raw);
+  const addShare = async (raw) => {
+    const parsed = await parseShare(raw);
     if (!parsed) {
-      setError("Invalid share format. Expected a JSON share from a recovery card.");
+      setError("Expected a vault share from a recovery card.");
       return false;
     }
 
@@ -78,16 +78,16 @@ export default function RecoveryApp() {
     setError("");
   };
 
-  const handlePaste = () => {
+  const handlePaste = async () => {
     if (!pasteValue.trim()) return;
-    if (addShare(pasteValue.trim())) {
+    if (await addShare(pasteValue.trim())) {
       setPasteValue("");
     }
   };
 
-  const handleScan = (data) => {
+  const handleScan = async (data) => {
     setShowScanner(false);
-    addShare(data);
+    await addShare(data);
   };
 
   const handleDecrypt = async () => {
@@ -102,9 +102,8 @@ export default function RecoveryApp() {
         return;
       }
 
-      // Reconstruct key from shares
-      const hexShares = shares.map((s) => s.s);
-      const keyHex = reconstructKey(hexShares);
+      // Reconstruct key from shares (WASM handles share extraction)
+      const keyHex = await reconstructKey(shares);
 
       // Fetch encrypted vault
       const vault = await fetchVault();
@@ -192,7 +191,7 @@ export default function RecoveryApp() {
               <textarea
                 value={pasteValue}
                 onChange={(e) => setPasteValue(e.target.value)}
-                placeholder='Paste share JSON here... {"v":1,"i":1,...}'
+                placeholder="Paste share here... vault:..."
                 className="flex-1 h-20 bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent font-mono text-sm resize-none touch-manipulation"
               />
               <button
@@ -357,7 +356,7 @@ export default function RecoveryApp() {
                     <textarea
                       value={pasteValue}
                       onChange={(e) => setPasteValue(e.target.value)}
-                      placeholder="Paste share JSON..."
+                      placeholder="Paste share... vault:..."
                       className="flex-1 h-16 bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-gray-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent font-mono text-xs resize-none touch-manipulation"
                     />
                     <button

@@ -13,78 +13,95 @@ Shamir's Secret Sharing solves this: split a secret into **N pieces** and requir
 ## Architecture
 
 ```
-CLI (vault owner):
-  plaintext → AES-256-GCM(random 256-bit key) → public/vault.json
-  key → Shamir K-of-N → N shares → N printed PDF cards
+CLI (vault owner, Rust binary):
+  plaintext → AES-256-GCM(random 256-bit key) → vault.json
+  key → Shamir K-of-N (blahaj) → N shares → N printed PDF cards
 
-Web App (share holders):
-  K shares (scanned/pasted) → Shamir reconstruct → key
-  key + vault.json (fetched) → AES-256-GCM decrypt → plaintext
+Web App (share holders, React + WASM):
+  K shares (scanned/pasted) → WASM Shamir reconstruct → key
+  key + vault.json (fetched) → WebCrypto AES-GCM decrypt → plaintext
 ```
 
 **Key design decisions:**
 
 - The secret is **encrypted** with a random AES-256-GCM key, then the **key** is split via Shamir — not the secret itself. This means updating a secret just re-encrypts with the same key; no share redistribution needed.
-- Shares are only ~130 characters (just the 32-byte key), so each fits in a **single QR code** — no multi-part scanning.
+- Shares fit in a **single QR code** — no multi-part scanning.
 - The encrypted vault (`vault.json`) is safe to host publicly. Without enough shares, it's indistinguishable from random data.
-- All sensitive files (key, plaintext, PDFs) live in a single `vault-workspace/` directory for easy secure cleanup.
+- The CLI and web app share the same Shamir implementation (Rust `blahaj` crate) compiled to native + WASM.
+- **Compact share format**: shares are encoded as `vault:` + base58check (binary header + raw share bytes). No JSON, no base64 — just a single alphanumeric string (~62 chars) that's easy to hand-copy from paper. Built-in checksum catches transcription errors.
+
+## Monorepo Structure
+
+```
+my-last-resort/
+├── Cargo.toml                  # Rust workspace root
+├── crates/
+│   ├── vault-core/             # Shared: Shamir (blahaj), types, serialization
+│   ├── vault-wasm/             # WASM bindings for vault-core
+│   └── vault-cli/              # CLI binary (2.2MB)
+├── packages/
+│   └── vault-wasm/             # wasm-pack output (generated, gitignored)
+├── src/                        # React web app (recovery)
+├── package.json                # pnpm workspace
+└── vite.config.js              # Vite + WASM plugins
+```
 
 ## CLI: Creating a Vault
 
-The CLI runs on your machine (ideally a live USB — see [Security](#security) below).
+The CLI is a small (~2MB) Rust binary. Build it with `cargo build --release -p vault-cli`.
 
 ```bash
-# Install everything
-pnpm install
+# Build the CLI
+cargo build --release -p vault-cli
 
-# Interactive setup — threshold, shares, holder names
-pnpm vault init
+# Interactive setup — threshold, shares, recovery URL
+./target/release/vault init
 
-# Put your secret in the workspace
-echo "your secret seed phrase here" > vault-workspace/plaintext.txt
+# Put your secret in the current directory
+echo "your secret seed phrase here" > plaintext.txt
 
-# Encrypt → creates public/vault.json + vault-workspace/.vault-key
-pnpm vault encrypt
+# Encrypt → creates vault.json + .vault-key
+./target/release/vault encrypt
 
-# Split key into Shamir shares → PDF cards in vault-workspace/shares/
-pnpm vault split
+# Split key into Shamir shares → PDF cards in shares/
+./target/release/vault split
 
 # Print the PDFs, hand them to holders, then:
-pnpm vault:cleanup    # shreds and deletes vault-workspace/
+./target/release/vault cleanup    # shreds sensitive files
 ```
 
 ### Other CLI Commands
 
 ```bash
+# Decrypt vault.json back to plaintext for editing
+./target/release/vault decrypt
+
 # Re-encrypt with same key (update secret, no share redistribution)
-pnpm vault update
+./target/release/vault update
 
 # Nuclear option: new key + new vault + new shares (old shares become invalid)
-pnpm vault reissue
+./target/release/vault reissue
 ```
 
 ### What Gets Created
 
 ```
-vault-workspace/           # ALL sensitive files — one folder
-├── .vault-key             # 256-bit AES key (hex)
-├── plaintext.txt          # your secret
-├── vault.config.json      # threshold, shares, holder info
-└── shares/                # generated PDF cards
-    ├── share-1-Alice.pdf
-    ├── share-2-Bob.pdf
-    └── ...
-
-public/
-└── vault.json             # encrypted blob (safe to deploy)
+.vault-key             # 256-bit AES key (hex) — SENSITIVE
+plaintext.txt          # your secret — SENSITIVE
+vault.config.json      # threshold, shares, recovery URL
+vault.json             # encrypted blob (safe to deploy)
+shares/                # generated PDF cards — SENSITIVE
+├── share-1.pdf
+├── share-2.pdf
+└── ...
 ```
 
 ### PDF Share Cards
 
 Each PDF is 3 pages:
-1. **Share card** — QR code, plain text fallback, holder name, confidential warning
-2. **Recovery instructions** — step-by-step guide, all holder contacts, security reminders
-3. **Manual recovery script** — standalone browser console JS that loads the Shamir library from CDN and decrypts, in case the web app ever goes offline
+1. **Share card** — QR code, plain text fallback, confidential warning
+2. **Recovery instructions** — step-by-step guide, security reminders
+3. **Manual recovery script** — standalone browser console JS using WASM module for offline decryption
 
 ## Web App: Recovering a Secret
 
@@ -92,32 +109,56 @@ The web app is recovery-only. Share holders visit it when they need to reconstru
 
 1. Gather enough share holders (the threshold — e.g., 3 of 5)
 2. Open the web app
-3. Each holder scans their QR code or pastes the JSON from their PDF
+3. Each holder scans their QR code or pastes the `vault:...` string from their PDF
 4. Once the threshold is met, click **Decrypt**
-5. The app fetches `vault.json`, reconstructs the AES key from the shares, and decrypts
+5. The app fetches `vault.json`, reconstructs the AES key from the shares (via WASM), and decrypts (via WebCrypto)
 
 Everything runs client-side. Nothing is sent to any server.
 
 ```bash
-# Dev server (HTTPS required for camera access)
+# Dev server (HTTPS required for camera access — builds WASM first)
 pnpm dev
 
 # Deploy to GitHub Pages
 pnpm deploy-pages
 ```
 
+## Releasing
+
+Pushing a version tag to GitHub triggers a CI workflow that builds the Linux CLI binary and creates a GitHub Release with the artifact attached.
+
+```bash
+# Bump version in crates/vault-cli/Cargo.toml, commit, then:
+pnpm release    # reads version from Cargo.toml, creates + pushes a git tag
+
+# GitHub Actions builds the binary and publishes the release automatically.
+```
+
+### Scripts Reference
+
+| Script | What it does |
+|--------|-------------|
+| `pnpm dev` | Build WASM + start Vite dev server |
+| `pnpm build` | Build WASM + production Vite build |
+| `pnpm deploy-pages` | Full build + deploy to GitHub Pages |
+| `pnpm cli:build` | Build CLI binary (`target/release/vault`) |
+| `pnpm wasm:build` | Build WASM package only |
+| `pnpm release` | Tag current version + push tag (triggers CI release) |
+| `pnpm vault:web` | Copy `vault.json` to `public/` for local dev |
+
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| CLI | TypeScript, Commander, tsup |
-| Encryption | AES-256-GCM (Node `crypto` / WebCrypto `crypto.subtle`) |
-| Secret Sharing | [secrets.js-grempe](https://github.com/grempe/secrets.js) |
-| PDF Generation | pdf-lib + qrcode |
+| CLI | Rust, clap, aes-gcm, printpdf |
+| Shared Shamir | Rust `blahaj` crate (vault-core) |
+| WASM Bridge | wasm-bindgen, wasm-pack |
+| Encryption | AES-256-GCM (Rust `aes-gcm` / WebCrypto `crypto.subtle`) |
+| PDF Generation | printpdf + qrcode |
 | Web Framework | React 19 + Vite |
 | Styling | Tailwind CSS 4 |
 | QR Scanning | jsQR |
-| Workspace | pnpm monorepo |
+| Workspace | Cargo workspace + pnpm |
 
 ## Security
 
@@ -126,6 +167,7 @@ pnpm deploy-pages
 - **Shamir's Secret Sharing** is information-theoretically secure: fewer than K shares reveal *zero* information about the key. This isn't encryption that could be brute-forced — it's mathematically impossible.
 - **AES-256-GCM** provides authenticated encryption. Tampering with `vault.json` is detected on decryption.
 - The web app uses the **WebCrypto API** (`crypto.subtle`), the browser's native cryptographic implementation.
+- The `blahaj` crate is a maintained fork of `sharks`, which had a security vulnerability ([RUSTSEC-2024-0398](https://rustsec.org/advisories/RUSTSEC-2024-0398.html)).
 
 ### Operational Security
 
@@ -133,22 +175,22 @@ pnpm deploy-pages
 
 1. Flash Tails to a USB stick
 2. Boot from it, skip network setup (you don't need internet)
-3. Clone or copy the repo from a second USB
-4. Run `pnpm install`, then the vault commands
+3. Copy the pre-built `vault` binary from a second USB
+4. Run the vault commands
 5. Print PDFs to a USB-connected printer (not a network printer)
 6. Shut down — RAM is wiped, nothing was ever written to disk
 
 **If running on your normal machine:**
 
-- `pnpm vault:cleanup` shreds all files in `vault-workspace/` (overwrites with random data before deleting)
+- `vault cleanup` shreds all sensitive files (overwrites with zeros before deleting, or uses `shred` on Linux)
 - Clear your shell history afterward: `history -c`
 - Note: on SSDs, `shred` isn't 100% guaranteed due to wear-leveling. A live USB avoids this entirely.
 
 ### What's Safe to Commit
 
-- `public/vault.json` — encrypted blob, safe to host publicly
+- `vault.json` — encrypted blob, safe to host publicly
 - All source code — no secrets embedded
-- `vault-workspace/` is gitignored
+- `.vault-key`, `plaintext.txt`, `shares/` are gitignored
 
 ## License
 

@@ -1,29 +1,17 @@
+import { parse_share, ensureInit } from "./sss.util";
+
 /**
- * Parse a share from raw JSON string or scanned QR data.
- * Expected format: {"v":1,"i":2,"t":3,"n":5,"s":"hex..."}
+ * Parse a share from a compact "vault:..." string or scanned QR data.
+ * Returns {v, i, t, n, compact} or null.
+ * Async because WASM must be initialized first.
  */
-export function parseShare(raw) {
+export async function parseShare(raw) {
   try {
-    // Strip all whitespace/newlines (PDF copy-paste introduces line breaks)
-    const cleaned = typeof raw === "string" ? raw.replace(/\s/g, "") : raw;
-    const data = typeof cleaned === "string" ? JSON.parse(cleaned) : cleaned;
-
-    if (
-      data.v !== 1 ||
-      typeof data.i !== "number" ||
-      typeof data.t !== "number" ||
-      typeof data.n !== "number" ||
-      typeof data.s !== "string" ||
-      data.i < 1 ||
-      data.i > data.n ||
-      data.t < 2 ||
-      data.t > data.n ||
-      !data.s.length
-    ) {
-      return null;
-    }
-
-    return data;
+    await ensureInit();
+    const cleaned = typeof raw === "string" ? raw.trim() : String(raw).trim();
+    const result = parse_share(cleaned);
+    // parse_share returns a JS object {v, i, t, n, compact} or null
+    return result || null;
   } catch {
     return null;
   }

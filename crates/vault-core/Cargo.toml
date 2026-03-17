@@ -1,0 +1,10 @@
+[package]
+name = "vault-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+blahaj.workspace = true
+bs58.workspace = true
+zeroize.workspace = true
+thiserror.workspace = true

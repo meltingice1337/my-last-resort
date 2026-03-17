@@ -1,17 +1,13 @@
-import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import tailwindcss from "@tailwindcss/vite";
+import wasm from "vite-plugin-wasm";
+import topLevelAwait from "vite-plugin-top-level-await";
 
 export default defineConfig({
-  plugins: [tailwindcss(), react(), basicSsl()],
+  plugins: [tailwindcss(), react(), basicSsl(), wasm(), topLevelAwait()],
   base: "/my-last-resort/",
-  resolve: {
-    alias: {
-      crypto: path.resolve(import.meta.dirname, "src/util/crypto-shim.js"),
-    },
-  },
   server: {
     host: true,
     strictPort: true,
@@ -25,5 +21,8 @@ export default defineConfig({
         drop_console: false,
       },
     },
+  },
+  optimizeDeps: {
+    exclude: ["vault-wasm"],
   },
 });

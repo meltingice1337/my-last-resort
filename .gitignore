@@ -1,7 +1,8 @@
 node_modules/
 dist/
 cli/dist/
-vault-cli
 .vault-key
 plaintext.txt
 shares/
+target/
+packages/vault-wasm/
