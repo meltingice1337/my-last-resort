@@ -83,6 +83,35 @@ fn wrap_text(text: &str, max_chars: usize) -> Vec<String> {
     lines
 }
 
+/// Millimeters a single Courier (mono) character consumes at the given point size.
+/// Courier's advance width is 600/1000 em; 1pt = 25.4/72 mm.
+fn mono_mm_per_char(pt: f32) -> f32 {
+    0.6 * pt * (25.4 / 72.0)
+}
+
+/// Largest Courier point size in `[min_pt, max_pt]` that fits `len` chars in
+/// `usable_mm` on one line. A small safety factor keeps float rounding from
+/// spilling the last character onto a second line.
+fn mono_fit_pt(len: usize, usable_mm: f32, min_pt: f32, max_pt: f32) -> f32 {
+    if len == 0 {
+        return max_pt;
+    }
+    let ideal = (usable_mm * 0.96) / (len as f32 * mono_mm_per_char(1.0));
+    ideal.clamp(min_pt, max_pt)
+}
+
+/// Hard-wrap a spaceless string (e.g. a URL) into chunks of at most `max_chars`.
+fn hard_wrap(text: &str, max_chars: usize) -> Vec<String> {
+    if max_chars == 0 {
+        return vec![text.to_string()];
+    }
+    text.chars()
+        .collect::<Vec<_>>()
+        .chunks(max_chars)
+        .map(|c| c.iter().collect())
+        .collect()
+}
+
 pub fn generate_share_pdf(
     share: &SharePayload,
     config: &VaultConfig,
@@ -131,6 +160,7 @@ pub fn generate_share_pdf(
         0.0,
         share,
         &share_compact,
+        config,
         &font,
         &font_bold,
         &font_mono,
@@ -149,6 +179,7 @@ fn draw_share_card(
     x_off: f32,
     share: &SharePayload,
     share_compact: &str,
+    config: &VaultConfig,
     font: &IndirectFontRef,
     font_bold: &IndirectFontRef,
     font_mono: &IndirectFontRef,
@@ -225,17 +256,49 @@ fn draw_share_card(
     );
     y -= qr_size_mm + 3.0;
 
-    // Caption
-    draw_text(
-        layer,
-        "Scan this QR code at the recovery website",
-        l + 8.0,
-        y,
-        font,
-        8.0,
-        BLACK,
-    );
-    y -= 7.0;
+    // Recovery website — the holder's first action, shown big and clear.
+    if !config.repo_url.is_empty() {
+        draw_text(layer, "GO TO THIS WEBSITE", l, y, font_bold, 8.5, BLACK);
+        y -= 6.5;
+
+        let usable = CARD_W - 4.0;
+        let n = config.repo_url.chars().count();
+        let url_pt = mono_fit_pt(n, usable, 9.0, 14.0);
+        let chars_per_line = (usable / mono_mm_per_char(url_pt)).floor().max(1.0) as usize;
+        let url_lines = hard_wrap(&config.repo_url, chars_per_line);
+
+        let line_h = url_pt * (25.4 / 72.0) * 1.25; // mm per line
+        let band_h = url_lines.len() as f32 * line_h + 3.0;
+        draw_rect_fill(layer, l, y - band_h, CARD_W, band_h, (0.93, 0.93, 0.93), BORDER);
+        for (idx, line) in url_lines.iter().enumerate() {
+            let baseline = y - 1.5 - line_h * 0.75 - idx as f32 * line_h;
+            draw_text(layer, line, l + 3.0, baseline, font_mono, url_pt, BLACK);
+        }
+        y -= band_h + 4.0;
+
+        draw_text(
+            layer,
+            "Scan the QR above, or type the code below.",
+            l,
+            y,
+            font,
+            8.0,
+            BLACK,
+        );
+        y -= 7.0;
+    } else {
+        // No URL configured — fall back to the generic caption.
+        draw_text(
+            layer,
+            "Scan this QR code at the recovery website",
+            l + 8.0,
+            y,
+            font,
+            8.0,
+            BLACK,
+        );
+        y -= 7.0;
+    }
 
     // Plain text fallback — black bold mono, single line
     draw_text(
@@ -318,6 +381,9 @@ fn draw_recovery_page(
 ) -> Result<()> {
     let l = x_off + MARGIN;
     let mut y = A4_H - MARGIN;
+
+    // Trim any trailing slash so composed sub-paths don't become `host//assets/...`.
+    let base = config.repo_url.trim_end_matches('/');
 
     // === RECOVERY INSTRUCTIONS ===
     draw_text(
@@ -431,13 +497,11 @@ fn draw_recovery_page(
     // Recovery script
     let script_lines = vec![
         "(async()=>{".to_string(),
-        format!(
-            "  const WASM='{}/assets/vault_wasm_bg.wasm';",
-            config.repo_url
-        ),
-        format!("  const JS='{}/assets/vault_wasm.js';", config.repo_url),
+        format!("  const WASM='{base}/assets/vault_wasm_bg.wasm';"),
+        format!("  const JS='{base}/assets/vault_wasm.js';"),
         "  const mod=await import(JS); await mod.default(WASM);".to_string(),
-        "  window.recover=async function(shares,vaultUrl){".to_string(),
+        format!("  const VAULT='{base}/vault.json';"),
+        "  window.recover=async function(shares,vaultUrl=VAULT){".to_string(),
         "    const keyHex=mod.combine_shares(JSON.stringify(shares));".to_string(),
         "    const vault=await(await fetch(vaultUrl)).json();".to_string(),
         "    const hex=s=>new Uint8Array(s.match(/.{2}/g).map(b=>parseInt(b,16)));".to_string(),
@@ -449,11 +513,20 @@ fn draw_recovery_page(
         "    const text=new TextDecoder().decode(pt);".to_string(),
         "    console.log('RECOVERED:',text); return text;".to_string(),
         "  };".to_string(),
-        "  console.log('Ready! recover([\"vault:...\"],\"url\")');".to_string(),
+        "  console.log('Ready. Run: recover([\"vault:...\",\"vault:...\"])');".to_string(),
         "})();".to_string(),
     ];
 
-    let line_h = 3.5;
+    // Auto-size the script font so the longest line (which embeds the URL) fits
+    // within the card. These lines can't wrap: a hand-typed JS string literal
+    // can't span two physical lines, so we shrink to fit instead.
+    let longest = script_lines
+        .iter()
+        .map(|s| s.chars().count())
+        .max()
+        .unwrap_or(0);
+    let script_pt = mono_fit_pt(longest, CARD_W - 3.0, 5.5, 8.0);
+    let line_h = script_pt * (25.4 / 72.0) * 1.25;
     let box_h = script_lines.len() as f32 * line_h + 3.0;
     draw_rect_fill(
         layer,
@@ -467,22 +540,9 @@ fn draw_recovery_page(
 
     for line in &script_lines {
         y -= line_h;
-        draw_text(layer, line, l + 1.5, y, font_mono, 8.0, (0.0, 0.0, 0.0));
+        draw_text(layer, line, l + 1.5, y, font_mono, script_pt, (0.0, 0.0, 0.0));
     }
     y -= 4.5;
-
-    if !config.repo_url.is_empty() {
-        draw_text(
-            layer,
-            &format!("Vault: {}/vault.json", config.repo_url),
-            l,
-            y,
-            font,
-            7.0,
-            BLACK,
-        );
-        y -= 4.0;
-    }
 
     // Warning
     let warn_h = 7.0;

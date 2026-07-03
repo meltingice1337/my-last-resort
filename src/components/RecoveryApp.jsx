@@ -17,6 +17,7 @@ import { parseShare, validateShareSet } from "../util/share.util";
 import { reconstructKey } from "../util/sss.util";
 import { decryptVault } from "../util/crypto.util";
 import { fetchVault } from "../util/vault.util";
+import { formatVaultDate } from "../util/date.util";
 
 export default function RecoveryApp() {
   const [shares, setShares] = useState([]); // parsed SharePayload objects
@@ -153,7 +154,7 @@ export default function RecoveryApp() {
             </p>
             {vaultInfo && (
               <p className="text-xs text-gray-500 mt-1">
-                Vault r{vaultInfo.revision} — {new Date(vaultInfo.updated).toLocaleString()}
+                Vault r{vaultInfo.revision} — {formatVaultDate(vaultInfo.updated)}
               </p>
             )}
             <p className="text-xs text-gray-600 mt-1">v{__APP_VERSION__}</p>
@@ -272,7 +273,7 @@ export default function RecoveryApp() {
 
         {vaultInfo && (
           <p className="text-xs text-gray-500 text-center -mt-6 mb-4">
-            Vault r{vaultInfo.revision} — {new Date(vaultInfo.updated).toLocaleString()} — v{__APP_VERSION__}
+            Vault r{vaultInfo.revision} — {formatVaultDate(vaultInfo.updated)} — v{__APP_VERSION__}
           </p>
         )}
 
