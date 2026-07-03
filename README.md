@@ -4,6 +4,58 @@ A two-part system for securely passing sensitive secrets (crypto keys, passwords
 
 A **CLI tool** encrypts your secret and splits the encryption key into shares distributed as printed PDF cards. A **web app** lets share holders scan their QR codes, reconstruct the key, and decrypt the vault.
 
+## Quickstart: What You Actually Do
+
+There are three moments in this vault's life: **set it up once**, **update your secret later**, and (for your holders) **recover it**. Here is each, step by step.
+
+> Examples below call the binary `vault`. That is shorthand for `./target/release/vault` unless you've put it on your `PATH`.
+
+### 1. One-time setup (create the vault, hand out cards)
+
+1. Build the CLI: `cargo build --release -p vault-cli` (binary lands at `target/release/vault`).
+2. Configure the vault: `vault init` (interactive: threshold K, total shares N, recovery website URL). Writes `vault.config.json`.
+3. Put your secret in `plaintext.txt`: `echo "your seed phrase here" > plaintext.txt`.
+4. Encrypt it: `vault encrypt`. Creates `vault.json` (the public, encrypted blob) and `.vault-key` (the secret AES key).
+5. Make the share cards: `vault split`. Writes `shares/share-1.pdf` ... `shares/share-N.pdf`, one QR card per holder.
+6. Print the PDFs and give one to each trusted holder.
+7. Publish `vault.json` (see step 4 below).
+8. Decide whether to keep `.vault-key` (see the warning below), then run `vault cleanup` to shred the sensitive files.
+
+### 2. Update your secret later (same key, cards stay valid)
+
+You need both `.vault-key` and `vault.json` in the current directory for this. If you shredded `.vault-key`, skip to "Rotate the key" below.
+
+1. Decrypt the current secret: `vault decrypt`. Writes `plaintext.txt` (needs `.vault-key`).
+2. Edit `plaintext.txt` with your changes.
+3. Re-encrypt with the same key: `vault update`. Bumps the revision; every printed card stays valid, no redistribution.
+4. Publish the new `vault.json` (see step 4 below).
+5. Run `vault cleanup` to shred `plaintext.txt` again.
+
+### 3. Recover the secret (this is for your holders, not you)
+
+1. K holders gather and open the recovery website.
+2. Each scans their QR code or pastes their `vault:...` string.
+3. Once K shares are present, click **Decrypt**. The site reconstructs the key and decrypts `vault.json` in the browser.
+
+Holders **never need `.vault-key`.** Reconstructing the key from K shares is the whole point.
+
+### 4. Publish the vault (make the new vault.json live)
+
+1. Stage it into the web app: `pnpm vault:stage` (copies `vault.json` to `public/vault.json`).
+2. Commit it: `git add public/vault.json && git commit -m "vault: new revision"`.
+3. Deploy the site: `pnpm web:deploy` (pushes HEAD, builds, then publishes to GitHub Pages).
+
+### ⚠️ Keep your `.vault-key` if you ever want to update
+
+`vault decrypt` and `vault update` both **require `.vault-key`**, and `vault cleanup` **shreds it** along with `plaintext.txt` and the PDFs. There is no command that rebuilds the key from shares. So once the key is gone, you can no longer update your secret in place: your only option becomes `vault reissue`, which mints a new key and **invalidates every card you already handed out**, forcing a full reprint and redistribution.
+
+- **Plan to update your secret over time?** Back up `.vault-key` somewhere safe (password manager, encrypted USB) before `vault cleanup`.
+- **Secret will never change?** Let `cleanup` shred it. Your holders can still recover from their cards regardless.
+
+### Rotate the key (lost `.vault-key`, or key possibly compromised)
+
+Run `vault reissue`: it generates a new key, re-encrypts the secret, and produces a fresh set of share PDFs. All old cards become invalid, so collect and destroy them, then publish the new `vault.json` and hand out the new cards.
+
 ## Why This Exists
 
 We all have digital assets — crypto wallets, password vaults, important accounts — and if something happens to us, that information can be lost forever. Handing a single person your master password is a huge trust (and security) risk. Giving it to nobody means it dies with you.
@@ -120,7 +172,7 @@ Everything runs client-side. Nothing is sent to any server.
 pnpm dev
 
 # Deploy to GitHub Pages
-pnpm deploy-pages
+pnpm web:deploy
 ```
 
 ## Releasing
@@ -129,7 +181,7 @@ Pushing a version tag to GitHub triggers a CI workflow that builds the Linux CLI
 
 ```bash
 # Bump version in crates/vault-cli/Cargo.toml, commit, then:
-pnpm release    # reads version from Cargo.toml, creates + pushes a git tag
+pnpm cli:release    # reads version from Cargo.toml, creates + pushes a git tag
 
 # GitHub Actions builds the binary and publishes the release automatically.
 ```
@@ -140,11 +192,11 @@ pnpm release    # reads version from Cargo.toml, creates + pushes a git tag
 |--------|-------------|
 | `pnpm dev` | Build WASM + start Vite dev server |
 | `pnpm build` | Build WASM + production Vite build |
-| `pnpm deploy-pages` | Full build + deploy to GitHub Pages |
+| `pnpm web:deploy` | Full build + deploy to GitHub Pages |
 | `pnpm cli:build` | Build CLI binary (`target/release/vault`) |
 | `pnpm wasm:build` | Build WASM package only |
-| `pnpm release` | Tag current version + push tag (triggers CI release) |
-| `pnpm vault:web` | Copy `vault.json` to `public/` for local dev |
+| `pnpm cli:release` | Tag current version + push tag (triggers CI release) |
+| `pnpm vault:stage` | Copy `vault.json` to `public/vault.json` before deploy |
 
 ## Tech Stack
 
