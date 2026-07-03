@@ -4,6 +4,38 @@ A two-part system for securely passing sensitive secrets (crypto keys, passwords
 
 A **CLI tool** encrypts your secret and splits the encryption key into shares distributed as printed PDF cards. A **web app** lets share holders scan their QR codes, reconstruct the key, and decrypt the vault.
 
+## Prerequisites
+
+Install these before building:
+
+- **Rust** (stable), via [rustup](https://rustup.rs). Needed for the CLI and for the web app's WASM crypto module.
+- **Node.js 18+ and pnpm 10+**. Needed for the web app. Run `npm i -g pnpm` if you don't have pnpm.
+- **wasm-pack** plus the **wasm32 target**. Needed only to build or deploy the web app, which compiles the Rust crypto to WASM.
+
+### Building only the CLI
+
+You just need Rust:
+
+```bash
+cargo build --release -p vault-cli
+```
+
+wasm-pack is not required for the CLI.
+
+### Building or deploying the web app
+
+One-time toolchain setup:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-pack        # compiles from source, takes a few minutes
+pnpm install                   # web dependencies
+```
+
+Or run all of it at once with `pnpm bootstrap`.
+
+If `wasm-pack` is missing you'll see `sh: 1: wasm-pack: not found` during `pnpm build` or `pnpm web:deploy`. The fix is the setup above.
+
 ## Quickstart: What You Actually Do
 
 There are three moments in this vault's life: **set it up once**, **update your secret later**, and (for your holders) **recover it**. Here is each, step by step.
@@ -190,6 +222,7 @@ pnpm cli:release    # reads version from Cargo.toml, creates + pushes a git tag
 
 | Script | What it does |
 |--------|-------------|
+| `pnpm bootstrap` | One-time toolchain setup: wasm32 target + wasm-pack + web deps |
 | `pnpm dev` | Build WASM + start Vite dev server |
 | `pnpm build` | Build WASM + production Vite build |
 | `pnpm web:deploy` | Full build + deploy to GitHub Pages |
