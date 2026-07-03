@@ -6,3 +6,4 @@ plaintext.txt
 shares/
 target/
 packages/vault-wasm/
+test/
