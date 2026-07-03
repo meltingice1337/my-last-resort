@@ -1,6 +1,6 @@
 {
   "name": "emergency-vault",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "description": "Emergency Vault — recover encrypted secrets using Shamir's Secret Sharing",
   "main": "index.js",
   "scripts": {
