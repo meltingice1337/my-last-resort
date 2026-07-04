@@ -277,6 +277,18 @@ pnpm cli:release    # reads version from Cargo.toml, creates + pushes a git tag
 - All source code — no secrets embedded
 - `.vault-key`, `plaintext.txt`, `shares/` are gitignored
 
+## Recovery telemetry (optional)
+
+The recovery app can beacon page/decrypt events to a self-hosted collector
+(`vault-canary`). To enable, create `.env.production.local` (untracked) with:
+
+    VITE_COLLECTOR_URL=https://canary.<domain>/e
+
+Then deploy as usual (`pnpm run web:deploy`). Vite auto-loads
+`.env.production.local` for production builds. With the variable unset, the app
+sends nothing. Beacons carry only metadata (event name, session id, counts,
+revision), never shares, keys, or plaintext.
+
 ## License
 
 MIT
