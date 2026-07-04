@@ -18,6 +18,7 @@ import { reconstructKey } from "../util/sss.util";
 import { decryptVault } from "../util/crypto.util";
 import { fetchVault } from "../util/vault.util";
 import { formatVaultDate } from "../util/date.util";
+import { track } from "../util/track";
 
 export default function RecoveryApp() {
   const [shares, setShares] = useState([]); // parsed SharePayload objects
@@ -36,6 +37,7 @@ export default function RecoveryApp() {
 
   // Fetch vault metadata on load
   useEffect(() => {
+    track("app_open", { revision: vaultInfo?.revision ?? null });
     fetchVault()
       .then((vault) => setVaultInfo({ revision: vault.revision, updated: vault.updated }))
       .catch(() => {});
@@ -70,6 +72,7 @@ export default function RecoveryApp() {
     }
 
     setShares((prev) => [...prev, parsed]);
+    track("share_added", { shares: shares.length + 1, threshold });
     setError("");
     return true;
   };
@@ -113,6 +116,7 @@ export default function RecoveryApp() {
       const plaintext = await decryptVault(vault.ciphertext, vault.iv, keyHex);
 
       setDecryptedSecret(plaintext);
+      track("decrypt_success", { shares: shares.length, threshold, revision: vaultInfo?.revision ?? null });
     } catch (err) {
       console.error("Decryption error:", err);
       if (err.message?.includes("vault.json")) {
@@ -122,6 +126,7 @@ export default function RecoveryApp() {
           "Decryption failed. The shares may be incorrect or from a different vault.",
         );
       }
+      track("decrypt_failure", { shares: shares.length, threshold });
     } finally {
       setLoading(false);
     }
@@ -130,6 +135,7 @@ export default function RecoveryApp() {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(decryptedSecret);
+      track("secret_copied", {});
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
