@@ -250,9 +250,56 @@ pnpm cli:release    # reads version from Cargo.toml, creates + pushes a git tag
 ### Cryptographic Guarantees
 
 - **Shamir's Secret Sharing** is information-theoretically secure: fewer than K shares reveal *zero* information about the key. This isn't encryption that could be brute-forced — it's mathematically impossible.
-- **AES-256-GCM** provides authenticated encryption. Tampering with `vault.json` is detected on decryption.
+- **AES-256-GCM** provides authenticated encryption. Tampering with `vault.json` is detected on decryption, including its `version`, `revision`, and `updated` fields (see [Vault format](#vault-format)).
 - The web app uses the **WebCrypto API** (`crypto.subtle`), the browser's native cryptographic implementation.
 - The `blahaj` crate is a maintained fork of `sharks`, which had a security vulnerability ([RUSTSEC-2024-0398](https://rustsec.org/advisories/RUSTSEC-2024-0398.html)).
+
+### Vault format
+
+`vault.json` is at format **v2**. The CLI writes v2 only, and the recovery app
+accepts v2 only.
+
+```json
+{ "version": 2, "revision": 7, "updated": "2026-08-19T08:27:28.910Z",
+  "iv": "...", "ciphertext": "..." }
+```
+
+v2 seals `version`, `revision`, and `updated` into the AES-GCM authentication
+tag as additional authenticated data, using the canonical string:
+
+    emergency-vault/v2|version:{version}|revision:{revision}|updated:{updated}
+
+Why it matters: because `vault update` deliberately reuses the key so shares
+never need reprinting, every revision ever published stays decryptable by the
+same shares. Under v1 the tag covered the ciphertext alone, so anyone who could
+write to the recovery site could take an authentic older ciphertext, relabel it
+with a current-looking revision and date, and holders would decrypt it cleanly
+and act on stale secrets. No key or share was needed for that, and a bad revert
+or a restored backup did it just as well as an attacker. Under v2 any such
+mismatch fails decryption.
+
+The limit worth knowing: v2 guarantees the revision on screen is the one that
+was sealed. It cannot stop someone serving a complete, untouched older
+`vault.json`, which now displays its true older revision and date. Closing that
+gap needs holders to have some independent expectation of what they should see,
+for example a revision number written on the printed cards.
+
+The CLI builds this string in `build_aad` (`crates/vault-cli/src/crypto.rs`) and
+the app in `buildAad` (`src/util/crypto.util.js`). They must agree byte for
+byte. Both sides pin the format in tests, and `src/util/crypto.util.test.js`
+decrypts a golden vector produced by the CLI so the two cannot drift apart
+unnoticed.
+
+**Migrating a v1 vault.** The CLI still reads v1 so an existing vault can be
+upgraded, and warns when it sees one. Re-seal it before deploying a web app
+build, or recovery will reject the live vault:
+
+```bash
+vault decrypt          # reads v1, warns that its metadata is unauthenticated
+vault update           # re-seals as v2, bumps the revision
+pnpm vault:stage       # copy vault.json into public/
+pnpm web:deploy
+```
 
 ### Operational Security
 

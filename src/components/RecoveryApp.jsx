@@ -112,10 +112,13 @@ export default function RecoveryApp() {
       // Fetch encrypted vault
       const vault = await fetchVault();
 
-      // Decrypt
-      const plaintext = await decryptVault(vault.ciphertext, vault.iv, keyHex);
+      // Decrypt. The vault's version/revision/updated are bound into the auth
+      // tag, so this throws if any of them were altered after sealing.
+      const plaintext = await decryptVault(vault, keyHex);
 
       setDecryptedSecret(plaintext);
+      // Now authenticated: the revision on screen is the one that was sealed.
+      setVaultInfo({ revision: vault.revision, updated: vault.updated });
       track("decrypt_success", { shares: shares.length, threshold, revision: vaultInfo?.revision ?? null });
     } catch (err) {
       console.error("Decryption error:", err);

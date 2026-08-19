@@ -29,13 +29,28 @@ pub fn run(output: &str) -> Result<()> {
     let key_hex = fs::read_to_string(KEY_FILE)?;
     let key = crypto::key_from_hex(&key_hex)?;
 
-    let Ok(plaintext) = crypto::decrypt(&vault, &key) else {
+    let plaintext = match crypto::decrypt(&vault, &key) {
+        Ok(plaintext) => plaintext,
+        Err(e) => {
+            println!("{}", format!("{e}").red());
+            return Ok(());
+        }
+    };
+
+    if vault.version < crypto::VAULT_VERSION {
         println!(
             "{}",
-            "Decryption failed — wrong key or corrupted vault.json.".red()
+            format!(
+                "\nWARNING: this vault is format v{}. Its revision and updated fields are not\n\
+                 covered by the auth tag, so anyone who can write to your recovery site can\n\
+                 serve an older ciphertext under a current-looking revision and date.\n\
+                 Run 'vault update' to re-seal it as v{}, then redeploy vault.json.",
+                vault.version,
+                crypto::VAULT_VERSION
+            )
+            .yellow()
         );
-        return Ok(());
-    };
+    }
 
     // Write with mode 0o600
     let mut file = fs::OpenOptions::new()
