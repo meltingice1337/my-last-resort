@@ -99,10 +99,12 @@ pub fn decrypt(vault: &VaultJson, key: &[u8; 32]) -> Result<String> {
                 },
             )
         }
-        // Legacy vaults sealed the plaintext only. Readable so an existing vault
-        // can be migrated (`vault decrypt` then `vault update`), never written.
-        1 => cipher.decrypt(nonce, ciphertext_with_tag.as_ref()),
-        v => bail!("Unsupported vault version: {v}"),
+        // v1 is refused, not read. It sealed the plaintext alone, so accepting it
+        // anywhere would let an attacker downgrade a v2 vault back to the format
+        // with no metadata binding and undo the protection entirely.
+        v => bail!(
+            "Unsupported vault format v{v}. This CLI reads and writes v{VAULT_VERSION} only."
+        ),
     };
 
     let mut plaintext_bytes = opened.map_err(|_| {
@@ -162,9 +164,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_downgraded_version() {
-        // The exact attack from the v1 format: serve an authentic ciphertext
-        // under a version that skips the metadata binding.
+    fn rejects_a_downgrade_to_v1() {
+        // The exact attack the binding exists to stop: serve an authentic
+        // ciphertext under a version that skips the metadata binding.
         let mut vault = encrypt("top secret", &KEY, 1).unwrap();
         vault.version = 1;
         assert!(decrypt(&vault, &KEY).is_err());
@@ -184,7 +186,9 @@ mod tests {
     }
 
     #[test]
-    fn legacy_v1_vaults_remain_readable_for_migration() {
+    fn refuses_a_genuine_v1_vault() {
+        // A real v1 blob: correctly sealed under the same key, but with no
+        // metadata bound in. Refused rather than read.
         let iv = generate_iv();
         let cipher = Aes256Gcm::new_from_slice(&KEY).unwrap();
         let sealed = cipher
@@ -199,7 +203,7 @@ mod tests {
             ciphertext: BASE64.encode(&sealed),
         };
 
-        assert_eq!(decrypt(&vault, &KEY).unwrap(), "legacy secret");
+        assert!(decrypt(&vault, &KEY).is_err());
     }
 
     #[test]

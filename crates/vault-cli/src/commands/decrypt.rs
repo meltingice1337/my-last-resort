@@ -37,21 +37,6 @@ pub fn run(output: &str) -> Result<()> {
         }
     };
 
-    if vault.version < crypto::VAULT_VERSION {
-        println!(
-            "{}",
-            format!(
-                "\nWARNING: this vault is format v{}. Its revision and updated fields are not\n\
-                 covered by the auth tag, so anyone who can write to your recovery site can\n\
-                 serve an older ciphertext under a current-looking revision and date.\n\
-                 Run 'vault update' to re-seal it as v{}, then redeploy vault.json.",
-                vault.version,
-                crypto::VAULT_VERSION
-            )
-            .yellow()
-        );
-    }
-
     // Write with mode 0o600
     let mut file = fs::OpenOptions::new()
         .write(true)

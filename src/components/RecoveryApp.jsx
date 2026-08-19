@@ -125,8 +125,10 @@ export default function RecoveryApp() {
       if (err.message?.includes("vault.json")) {
         setError(err.message);
       } else {
+        // A failed tag check cannot distinguish wrong shares from altered
+        // metadata, so name both possibilities rather than only the likely one.
         setError(
-          "Decryption failed. The shares may be incorrect or from a different vault.",
+          "Decryption failed. The shares may be incorrect or from a different vault, or vault.json was altered after it was sealed.",
         );
       }
       track("decrypt_failure", { shares: shares.length, threshold });

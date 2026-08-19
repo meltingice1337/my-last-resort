@@ -290,16 +290,10 @@ byte. Both sides pin the format in tests, and `src/util/crypto.util.test.js`
 decrypts a golden vector produced by the CLI so the two cannot drift apart
 unnoticed.
 
-**Migrating a v1 vault.** The CLI still reads v1 so an existing vault can be
-upgraded, and warns when it sees one. Re-seal it before deploying a web app
-build, or recovery will reject the live vault:
-
-```bash
-vault decrypt          # reads v1, warns that its metadata is unauthenticated
-vault update           # re-seals as v2, bumps the revision
-pnpm vault:stage       # copy vault.json into public/
-pnpm web:deploy
-```
+v1 is refused by both the CLI and the app rather than read. Accepting it
+anywhere would let anyone who can write to the recovery site downgrade a v2
+vault back to the format with no metadata binding, which would undo the
+protection entirely. A v1 vault has to be recreated with `vault encrypt`.
 
 ### Operational Security
 
